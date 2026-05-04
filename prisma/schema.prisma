@@ -1,0 +1,359 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Company {
+  id                String                @id @default(cuid())
+  name              String
+  slug              String                @unique
+  description       String?
+  isActive          Boolean               @default(true)
+  colorPrimary      String                @default("#3b82f6")
+  colorSecondary    String                @default("#60a5fa")
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  analyticsRecords  AnalyticsRecord[]
+  auditLogs         AuditLog[]
+  services          CompanyService[]
+  contracts         Contract[]
+  documents         Document[]
+  invoices          Invoice[]
+  operationsRecords OperationsRecord[]
+  registrations     PendingRegistration[]
+  uploadedDatasets  UploadedDataset[]
+  users             User[]
+
+  @@index([slug])
+  @@index([isActive])
+}
+
+model Service {
+  id               String            @id @default(cuid())
+  name             String
+  slug             String            @unique
+  icon             String
+  description      String?
+  isActive         Boolean           @default(true)
+  analyticsRecords AnalyticsRecord[]
+  companies        CompanyService[]
+  documents        Document[]
+  uploadedDatasets UploadedDataset[]
+
+  @@index([slug])
+}
+
+model CompanyService {
+  companyId  String
+  serviceId  String
+  assignedAt DateTime @default(now())
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  service    Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([companyId, serviceId])
+}
+
+model User {
+  id                String             @id @default(cuid())
+  username          String             @unique
+  email             String?            @unique
+  passwordHash      String
+  role              UserRole
+  status            UserStatus         @default(PENDING)
+  fullName          String?
+  companyId         String?
+  staffModules      Json?              // e.g. ["contracts","documents"] — STAFF role only
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  auditLogs         AuditLog[]
+  createdContracts  Contract[]         @relation("contract_creator")
+  documents         Document[]         @relation("uploader")
+  createdInvoices   Invoice[]          @relation("invoice_creator")
+  operationsRecords OperationsRecord[] @relation("operations_recorder")
+  uploadedDatasets  UploadedDataset[]
+  company           Company?           @relation(fields: [companyId], references: [id])
+  sessions          UserSession[]
+
+  @@index([username])
+  @@index([email])
+  @@index([companyId])
+  @@index([role, status])
+}
+
+model UserSession {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PendingRegistration {
+  id            String   @id @default(cuid())
+  username      String   @unique
+  email         String
+  passwordHash  String
+  fullName      String
+  requestedRole UserRole @default(STAFF)
+  companyId     String?
+  reason        String?
+  staffModules  Json?    // preserved during approval so modules carry over to User
+  createdAt     DateTime @default(now())
+  company       Company? @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+}
+
+model Contract {
+  id             String             @id @default(cuid())
+  companyId      String
+  title          String
+  contractNumber String?            @unique
+  client         String?
+  status         ContractStatus     @default(PENDING)
+  startDate      DateTime?          @db.Date
+  expiryDate     DateTime?          @db.Date
+  description    String?
+  isArchived     Boolean            @default(false)
+  createdBy      String
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  company        Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  creator        User               @relation("contract_creator", fields: [createdBy], references: [id])
+  documents      Document[]
+  invoices       Invoice[]
+  operations     OperationsRecord[]
+
+  @@index([companyId, status])
+  @@index([expiryDate])
+  @@index([companyId, isArchived])
+}
+
+model OperationsRecord {
+  id                   String    @id @default(cuid())
+  companyId            String
+  contractId           String?
+  date                 DateTime  @db.Date
+  department           String
+  manpowerCount        Int
+  equipmentTotal       Int       @default(0)
+  equipmentOperational Int       @default(0)
+  activityType         String
+  activityDescription  String?
+  performanceScore     Float
+  notes                String?
+  isArchived           Boolean   @default(false)
+  recordedBy           String
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  company              Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contract             Contract? @relation(fields: [contractId], references: [id])
+  recorder             User      @relation("operations_recorder", fields: [recordedBy], references: [id])
+
+  @@index([companyId, date])
+  @@index([date])
+  @@index([companyId, department])
+  @@index([activityType])
+  @@index([contractId])
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  companyId     String
+  contractId    String?
+  invoiceNumber String        @unique
+  client        String
+  amount        Decimal       @db.Decimal(14, 2)
+  status        InvoiceStatus @default(DRAFT)
+  issueDate     DateTime      @db.Date
+  dueDate       DateTime?     @db.Date
+  paidDate      DateTime?     @db.Date
+  notes         String?
+  isArchived    Boolean       @default(false)
+  createdBy     String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contract      Contract?     @relation(fields: [contractId], references: [id])
+  creator       User          @relation("invoice_creator", fields: [createdBy], references: [id])
+
+  @@index([companyId, status])
+  @@index([dueDate])
+  @@index([companyId, isArchived])
+  @@index([invoiceNumber])
+}
+
+model AnalyticsRecord {
+  id          String   @id @default(cuid())
+  companyId   String
+  serviceId   String
+  date        DateTime @db.Date
+  revenue     Decimal  @db.Decimal(14, 2)
+  orders      Int
+  deliveries  Int
+  performance Float
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, serviceId, date])
+  @@index([companyId, date])
+  @@index([serviceId, date])
+  @@index([date])
+}
+
+model Document {
+  id               String    @id @default(cuid())
+  title            String
+  filename         String
+  fileType         FileType
+  fileSize         Int
+  storageKey       String?
+  category         String
+  description      String?
+  companyId        String?
+  serviceId        String?
+  contractId       String?
+  uploadedBy       String
+  isArchived       Boolean   @default(false)
+  uploadedAt       DateTime  @default(now())
+  // Expiry and reminder fields
+  dateReceived     DateTime? @db.Date
+  expiryDate       DateTime? @db.Date
+  reminderSettings Json?     // e.g. ["1_MONTH","1_WEEK","2_DAYS"]
+  reminderSent     Json?     // e.g. {"1_MONTH":"2024-01-01T00:00:00Z"}
+  company          Company?  @relation(fields: [companyId], references: [id])
+  contract         Contract? @relation(fields: [contractId], references: [id])
+  service          Service?  @relation(fields: [serviceId], references: [id])
+  uploader         User      @relation("uploader", fields: [uploadedBy], references: [id])
+
+  @@index([companyId])
+  @@index([serviceId])
+  @@index([contractId])
+  @@index([uploadedBy])
+  @@index([uploadedAt])
+  @@index([expiryDate])
+}
+
+model UploadedDataset {
+  id           String   @id @default(cuid())
+  companyId    String
+  serviceId    String
+  filename     String
+  storageKey   String?
+  uploadedBy   String
+  uploadedAt   DateTime @default(now())
+  recordCount  Int      @default(0)
+  status       String   @default("pending")
+  errorMessage String?
+  company      Company  @relation(fields: [companyId], references: [id])
+  service      Service  @relation(fields: [serviceId], references: [id])
+  uploader     User     @relation(fields: [uploadedBy], references: [id])
+
+  @@index([companyId])
+  @@index([serviceId])
+  @@index([uploadedBy])
+}
+
+model AuditLog {
+  id           String      @id @default(cuid())
+  userId       String
+  username     String
+  action       AuditAction
+  details      String?
+  targetEntity String?
+  ipAddress    String?
+  userAgent    String?
+  companyId    String?
+  metadata     Json?
+  createdAt    DateTime    @default(now())
+  company      Company?    @relation(fields: [companyId], references: [id])
+  user         User        @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([companyId, createdAt])
+  @@index([action, createdAt])
+  @@index([createdAt])
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String
+  value     String
+  companyId String?
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@unique([key, companyId])
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  RAKEL_ADMIN
+  CEO
+  COMPANY_ADMIN
+  STAFF
+}
+
+enum UserStatus {
+  ACTIVE
+  PENDING
+  DECLINED
+  INACTIVE
+}
+
+enum FileType {
+  PDF
+  DOC
+  DOCX
+  XLSX
+  CSV
+}
+
+enum ContractStatus {
+  ACTIVE
+  PENDING
+  EXPIRED
+  COMPLETED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  USER_CREATE
+  USER_UPDATE
+  USER_DELETE
+  USER_APPROVE
+  USER_DECLINE
+  COMPANY_CREATE
+  COMPANY_UPDATE
+  DOCUMENT_UPLOAD
+  DOCUMENT_DELETE
+  DATA_IMPORT
+  SETTINGS_UPDATE
+  ANALYTICS_EXPORT
+  REGISTRATION_SUBMIT
+  OPERATIONS_ENTRY
+  CONTRACT_CREATE
+  CONTRACT_UPDATE
+  INVOICE_CREATE
+  INVOICE_UPDATE
+  DOCUMENT_EXPIRY_REMINDER
+}

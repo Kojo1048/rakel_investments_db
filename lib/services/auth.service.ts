@@ -1,0 +1,99 @@
+import bcrypt from 'bcryptjs';
+import { findUserByUsername, findUserByEmail } from '../repositories/user.repository';
+import { createAuditLog } from '../repositories/audit.repository';
+import { signToken, type SessionPayload } from '../auth/session';
+import { db } from '../db';
+
+const BCRYPT_ROUNDS = 12;
+
+export async function hashPassword(plain: string): Promise<string> {
+  return bcrypt.hash(plain, BCRYPT_ROUNDS);
+}
+
+export async function verifyPassword(plain: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(plain, hash);
+}
+
+export interface LoginResult {
+  token: string;
+  user: SessionPayload;
+}
+
+export async function login(
+  username: string,
+  password: string,
+  ipAddress?: string,
+  userAgent?: string
+): Promise<LoginResult> {
+  const user = await findUserByUsername(username);
+
+  if (!user || !(await verifyPassword(password, user.passwordHash))) {
+    throw new Error('Invalid username or password');
+  }
+
+  if (user.status !== 'ACTIVE') {
+    throw new Error(`Account is ${user.status.toLowerCase()}. Contact your administrator.`);
+  }
+
+  const payload: SessionPayload = {
+    userId: user.id,
+    username: user.username,
+    role: user.role,
+    status: user.status,
+    companyId: user.companyId ?? null,
+  };
+
+  const token = signToken(payload);
+
+  // Record the session server-side (token hash only — never store raw JWT)
+  const tokenHash = await bcrypt.hash(token, 8);
+  await db.userSession.create({
+    data: {
+      userId: user.id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000), // 8h
+      ipAddress,
+      userAgent,
+    },
+  });
+
+  // Audit log
+  await createAuditLog({
+    userId: user.id,
+    username: user.username,
+    action: 'LOGIN',
+    details: 'Successful login',
+    ipAddress,
+    userAgent,
+    companyId: user.companyId ?? undefined,
+  });
+
+  return { token, user: payload };
+}
+
+export async function logout(userId: string, username: string, tokenHash?: string): Promise<void> {
+  // Invalidate the specific session if token hash provided
+  if (tokenHash) {
+    await db.userSession.deleteMany({ where: { userId, tokenHash } });
+  } else {
+    // Invalidate all sessions for this user
+    await db.userSession.deleteMany({ where: { userId } });
+  }
+
+  await createAuditLog({
+    userId,
+    username,
+    action: 'LOGOUT',
+    details: 'User logged out',
+  });
+}
+
+export async function isUsernameAvailable(username: string): Promise<boolean> {
+  const user = await findUserByUsername(username);
+  return user === null;
+}
+
+export async function isEmailAvailable(email: string): Promise<boolean> {
+  const user = await findUserByEmail(email);
+  return user === null;
+}
