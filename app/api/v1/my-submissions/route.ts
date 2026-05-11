@@ -1,12 +1,14 @@
 /**
  * GET /api/v1/my-submissions
  *
- * Returns all records created by the authenticated user across all data types
- * (contracts, invoices, documents, operations).  Used by the Unified Upload Hub
- * "My Submissions" section to implement row-level data visibility for staff.
+ * Returns all non-archived records created by the authenticated user across
+ * all four data types (contracts, invoices, documents, operations).
  *
- * Admins receive a count per type (their own submissions only by default unless
- * they pass ?all=1, which shows everything).
+ * Security: userId is ALWAYS taken from the validated session — never from
+ * the request body or query params.
+ *
+ * Admin shortcut: SUPER_ADMIN and RAKEL_ADMIN may pass ?all=1 to see every
+ * record across the system (useful for audit/support purposes).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -29,45 +31,75 @@ export async function GET(req: NextRequest) {
     const session = withAuth(getSessionFromRequest(req));
     const userId  = session.userId;
 
-    // Admins with ?all=1 bypass the user filter (see everything)
-    const isAdmin  = ['SUPER_ADMIN', 'RAKEL_ADMIN'].includes(session.role);
-    const showAll  = isAdmin && req.nextUrl.searchParams.get('all') === '1';
+    const isAdmin = ['SUPER_ADMIN', 'RAKEL_ADMIN'].includes(session.role);
+    const showAll = isAdmin && req.nextUrl.searchParams.get('all') === '1';
 
-    const userFilter = showAll ? {} : { uploadedBy: userId };
-
-    // ── Parallel query across all four data types ──────────────────────────
+    // ── Parallel queries, each filtered to the session user unless showAll ──
     const [contracts, invoices, documents, operations] = await Promise.all([
 
       (db as any).contract.findMany({
-        where:   showAll ? {} : { createdBy: userId },
-        select:  { id: true, title: true, status: true, createdAt: true, company: { select: { name: true } } },
+        where:   showAll
+          ? { isArchived: false }
+          : { createdBy: userId, isArchived: false },
+        select:  {
+          id:        true,
+          title:     true,
+          status:    true,
+          createdAt: true,
+          company:   { select: { name: true } },
+        },
         orderBy: { createdAt: 'desc' },
         take:    50,
       }),
 
       (db as any).invoice.findMany({
-        where:   showAll ? {} : { createdBy: userId },
-        select:  { id: true, invoiceNumber: true, client: true, status: true, createdAt: true, company: { select: { name: true } } },
+        where:   showAll
+          ? { isArchived: false }
+          : { createdBy: userId, isArchived: false },
+        select:  {
+          id:            true,
+          invoiceNumber: true,
+          client:        true,
+          status:        true,
+          createdAt:     true,
+          company:       { select: { name: true } },
+        },
         orderBy: { createdAt: 'desc' },
         take:    50,
       }),
 
       (db as any).document.findMany({
-        where:   { ...userFilter, isArchived: false },
-        select:  { id: true, title: true, category: true, createdAt: null, uploadedAt: true, company: { select: { name: true } } },
+        where:   showAll
+          ? { isArchived: false }
+          : { uploadedBy: userId, isArchived: false },
+        select:  {
+          id:         true,
+          title:      true,
+          category:   true,
+          uploadedAt: true,              // Document uses uploadedAt, not createdAt
+          company:    { select: { name: true } },
+        },
         orderBy: { uploadedAt: 'desc' },
         take:    50,
       }),
 
       (db as any).operationsRecord.findMany({
-        where:   showAll ? {} : { recordedBy: userId },
-        select:  { id: true, activityType: true, department: true, createdAt: true, company: { select: { name: true } } },
+        where:   showAll
+          ? {}
+          : { recordedBy: userId },      // OperationsRecord uses recordedBy
+        select:  {
+          id:           true,
+          activityType: true,
+          department:   true,
+          createdAt:    true,
+          company:      { select: { name: true } },
+        },
         orderBy: { createdAt: 'desc' },
         take:    50,
       }),
     ]);
 
-    // ── Normalise into a unified shape ─────────────────────────────────────
+    // ── Normalise into a unified shape, then sort newest-first ────────────
     const items: SubmissionItem[] = [
       ...contracts.map((c: any) => ({
         id:          c.id,
@@ -77,6 +109,7 @@ export async function GET(req: NextRequest) {
         companyName: c.company?.name ?? null,
         createdAt:   new Date(c.createdAt).toISOString(),
       })),
+
       ...invoices.map((inv: any) => ({
         id:          inv.id,
         type:        'invoice' as const,
@@ -85,6 +118,7 @@ export async function GET(req: NextRequest) {
         companyName: inv.company?.name ?? null,
         createdAt:   new Date(inv.createdAt).toISOString(),
       })),
+
       ...documents.map((doc: any) => ({
         id:          doc.id,
         type:        'document' as const,
@@ -93,6 +127,7 @@ export async function GET(req: NextRequest) {
         companyName: doc.company?.name ?? null,
         createdAt:   new Date(doc.uploadedAt).toISOString(),
       })),
+
       ...operations.map((op: any) => ({
         id:          op.id,
         type:        'operation' as const,
@@ -105,7 +140,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       items,
-      total: items.length,
+      total:  items.length,
       userId: showAll ? null : userId,
     });
 

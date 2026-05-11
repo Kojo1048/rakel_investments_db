@@ -35,6 +35,7 @@ export async function createInvoice(input: InvoiceCreateInput, session: SessionP
     invoiceNumber,
     client:        input.client,
     amount:        input.amount,
+    currency:      input.currency ?? 'NLE',
     status:        input.status,
     issueDate:     input.issueDate,
     dueDate:       input.dueDate,

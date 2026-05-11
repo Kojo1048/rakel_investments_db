@@ -43,6 +43,7 @@ export async function createUser(input: CreateUserInput, actor: SessionPayload) 
 
 export async function updateUser(id: string, input: UpdateUserInput, actor: SessionPayload) {
   const updateData: Parameters<typeof UserRepo.updateUser>[1] = {
+    ...(input.username !== undefined && { username: input.username }),
     ...(input.email !== undefined && { email: input.email }),
     ...(input.fullName !== undefined && { fullName: input.fullName }),
     ...(input.role !== undefined && { role: input.role }),

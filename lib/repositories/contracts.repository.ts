@@ -48,15 +48,22 @@ export async function findContractById(id: string) {
   });
 }
 
+export async function findContractByNumber(contractNumber: string) {
+  return db.contract.findUnique({
+    where: { contractNumber },
+    select: { id: true },
+  });
+}
+
 export async function createContract(data: {
   companyId: string;
   title: string;
-  contractNumber?: string;
-  client?: string;
-  status?: string;
-  startDate?: Date;
-  expiryDate?: Date;
-  description?: string;
+  contractNumber?: string | null;
+  client?: string | null;
+  status?: string | null;
+  startDate?: Date | null;
+  expiryDate?: Date | null;
+  description?: string | null;
   createdBy: string;
 }) {
   return db.contract.create({ data: data as any });

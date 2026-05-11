@@ -7,7 +7,10 @@ import { Input } from '@/components/ui/input';
 import { FieldGroup, Field, FieldLabel } from '@/components/ui/field';
 import { Switch } from '@/components/ui/switch';
 import { Settings, Bell, Shield, Database, CheckCircle } from 'lucide-react';
-import { getTimeoutConfig, saveTimeoutConfig, DEFAULT_TIMEOUT_MINUTES } from '@/lib/session-timeout';
+import {
+  getTimeoutConfig, saveTimeoutConfig, clearTimeoutConfig,
+  DEFAULT_TIMEOUT_MINUTES, MINIMUM_TIMEOUT_MINUTES,
+} from '@/lib/session-timeout';
 
 export default function SettingsPage() {
   // Security state
@@ -17,16 +20,26 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const config = getTimeoutConfig();
+    // getTimeoutConfig already clamps to MINIMUM_TIMEOUT_MINUTES,
+    // so if the stored value was below the floor (e.g. "2") it returns
+    // DEFAULT_TIMEOUT_MINUTES here and the bad entry is silently replaced
+    // the next time the user saves.
     setTimeoutEnabled(config.enabled);
     setTimeoutMinutes(config.minutes);
   }, []);
 
   const handleSaveSecurity = () => {
-    const minutes = Math.max(1, timeoutMinutes || DEFAULT_TIMEOUT_MINUTES);
+    const minutes = Math.max(MINIMUM_TIMEOUT_MINUTES, timeoutMinutes || DEFAULT_TIMEOUT_MINUTES);
     setTimeoutMinutes(minutes);
     saveTimeoutConfig(timeoutEnabled, minutes);
     setSecuritySaved(true);
     setTimeout(() => setSecuritySaved(false), 2500);
+  };
+
+  const handleResetTimeout = () => {
+    clearTimeoutConfig();
+    setTimeoutEnabled(true);
+    setTimeoutMinutes(DEFAULT_TIMEOUT_MINUTES);
   };
 
   return (
@@ -143,10 +156,15 @@ export default function SettingsPage() {
             {/* Session duration input — always visible, disabled when timeout is off */}
             <FieldGroup>
               <Field>
-                <FieldLabel>Session Duration (minutes)</FieldLabel>
+                <FieldLabel>
+                  Session Duration (minutes)
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    default: {DEFAULT_TIMEOUT_MINUTES} min &mdash; min: {MINIMUM_TIMEOUT_MINUTES} min
+                  </span>
+                </FieldLabel>
                 <Input
                   type="number"
-                  min={1}
+                  min={MINIMUM_TIMEOUT_MINUTES}
                   max={480}
                   value={timeoutMinutes}
                   disabled={!timeoutEnabled}
@@ -164,19 +182,29 @@ export default function SettingsPage() {
               </Field>
             </FieldGroup>
 
-            <Button
-              className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
-              onClick={handleSaveSecurity}
-            >
-              {securitySaved ? (
-                <>
-                  <CheckCircle className="h-4 w-4" />
-                  Saved
-                </>
-              ) : (
-                'Save Security Settings'
-              )}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="border-border text-foreground hover:bg-muted"
+                onClick={handleResetTimeout}
+                title={`Clear stored override — restores ${DEFAULT_TIMEOUT_MINUTES}-minute default`}
+              >
+                Reset to Default
+              </Button>
+              <Button
+                className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
+                onClick={handleSaveSecurity}
+              >
+                {securitySaved ? (
+                  <>
+                    <CheckCircle className="h-4 w-4" />
+                    Saved
+                  </>
+                ) : (
+                  'Save Security Settings'
+                )}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 

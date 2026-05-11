@@ -9,13 +9,13 @@ export const OperationsCreateSchema = z.object({
   contractId:           optionalId,
   date:                 z.coerce.date(),
   department:           z.string().min(1).max(100),
-  manpowerCount:        z.coerce.number().int().min(0),
-  equipmentTotal:       z.coerce.number().int().min(0).default(0),
-  equipmentOperational: z.coerce.number().int().min(0).default(0),
+  manpowerCount:        z.coerce.number().int().min(1, 'Manpower count is required'),
+  equipmentTotal:       z.coerce.number().int().min(0),
+  equipmentOperational: z.coerce.number().int().min(0),
   activityType:         z.string().min(1).max(100),
   activityDescription:  z.string().max(500).optional(),
   performanceScore:     z.coerce.number().min(0).max(100),
-  notes:                z.string().max(500).optional(),
+  notes:                z.string().min(1, 'Notes are required').max(500),
 });
 
 export const OperationsQuerySchema = z.object({

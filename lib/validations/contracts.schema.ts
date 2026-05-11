@@ -9,13 +9,13 @@ export const ContractCreateSchema = z.object({
   // company-scoped roles (COMPANY_ADMIN, STAFF) leave it undefined — the
   // service fills it from the session.
   companyId:      optionalId,
-  title:          z.string().min(1).max(200),
-  contractNumber: z.string().max(100).optional(),
-  client:         z.string().max(200).optional(),
+  title:          z.string().min(1, 'Contract title is required').max(200),
+  contractNumber: z.string().min(1, 'Contract number is required').max(100),
+  client:         z.string().min(1, 'Client name is required').max(200),
   status:         z.enum(['ACTIVE', 'PENDING', 'EXPIRED', 'COMPLETED', 'CANCELLED']).default('PENDING'),
-  startDate:      z.coerce.date().optional(),
-  expiryDate:     z.coerce.date().optional(),
-  description:    z.string().max(1000).optional(),
+  startDate:      z.coerce.date({ required_error: 'Start date is required' }),
+  expiryDate:     z.coerce.date({ required_error: 'Expiry date is required' }),
+  description:    z.string().min(1, 'Description is required').max(1000),
 });
 
 export const ContractUpdateSchema = ContractCreateSchema.partial().extend({

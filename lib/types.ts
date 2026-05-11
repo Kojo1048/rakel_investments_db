@@ -105,6 +105,7 @@ export interface Invoice {
   invoiceNumber: string;
   client: string;
   amount: number;
+  currency: string;
   status: InvoiceStatus;
   issueDate: Date | string;
   dueDate?: Date | string | null;

@@ -43,7 +43,14 @@ export async function POST(req: NextRequest) {
     return response;
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Login failed';
-    const status = message.includes('Invalid') ? 401 : 403;
+    // DEBUG — 'User not found' / 'Password incorrect' are debug-only messages;
+    // replace the condition with message.includes('Invalid') before production.
+    const status =
+      message.includes('Invalid') || message.includes('not found') || message.includes('incorrect')
+        ? 401
+        : 403;
+    // DEBUG — log server-side so you can correlate browser errors with server output
+    console.log('[auth/login] error:', message, '→ status', status);
     return NextResponse.json({ error: message }, { status });
   }
 }

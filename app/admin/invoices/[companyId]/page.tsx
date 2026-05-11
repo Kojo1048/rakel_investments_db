@@ -9,6 +9,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, Receipt, Search, Building2, Calendar, DollarSign, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import type { Invoice, Company, InvoiceStatus } from '@/lib/types';
+import { CURRENCIES, CURRENCY_LABELS, fmtCurrency } from '@/lib/utils/currency';
 
 const STATUS_COLORS: Record<InvoiceStatus, string> = {
   DRAFT:     'bg-muted text-muted-foreground',
@@ -26,7 +27,8 @@ const STATUS_ICONS: Record<InvoiceStatus, React.ReactNode> = {
   CANCELLED: <AlertCircle className="h-3 w-3" />,
 };
 
-function fmt(amount: number) {
+// fmt is now currency-aware — uses the selected viewCurrency at the call site
+function fmtUSD(amount: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(amount);
 }
 
@@ -50,8 +52,9 @@ export default function CompanyInvoicesDetailPage() {
   const [company, setCompany] = useState<Company | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter,  setStatusFilter]  = useState('all');
+  const [searchTerm,    setSearchTerm]    = useState('');
+  const [viewCurrency,  setViewCurrency]  = useState<string>('NLE');
 
   useEffect(() => {
     fetch(`/api/v1/companies/${companyId}`, { credentials: 'include' })
@@ -70,12 +73,18 @@ export default function CompanyInvoicesDetailPage() {
   }, [companyId]);
 
   const summary = useMemo(() => {
-    const paid    = invoices.filter(i => i.status === 'PAID').reduce((s, i) => s + Number(i.amount), 0);
-    const pending = invoices.filter(i => i.status === 'SENT').reduce((s, i) => s + Number(i.amount), 0);
-    const overdue = invoices.filter(i => i.status === 'OVERDUE').reduce((s, i) => s + Number(i.amount), 0);
-    const draft   = invoices.filter(i => i.status === 'DRAFT').reduce((s, i) => s + Number(i.amount), 0);
-    return { total: invoices.length, paid, pending, overdue, draft };
-  }, [invoices]);
+    // Counts: GLOBAL (all currencies)
+    const paidCount    = invoices.filter(i => i.status === 'PAID').length;
+    const pendingCount = invoices.filter(i => i.status === 'SENT').length;
+    const overdueCount = invoices.filter(i => i.status === 'OVERDUE').length;
+    // Amounts: filtered by selected currency
+    const currInv = invoices.filter(i => i.currency === viewCurrency);
+    const paid    = currInv.filter(i => i.status === 'PAID').reduce((s, i) => s + Number(i.amount), 0);
+    const pending = currInv.filter(i => i.status === 'SENT').reduce((s, i) => s + Number(i.amount), 0);
+    const overdue = currInv.filter(i => i.status === 'OVERDUE').reduce((s, i) => s + Number(i.amount), 0);
+    const draft   = currInv.filter(i => i.status === 'DRAFT').reduce((s, i) => s + Number(i.amount), 0);
+    return { total: invoices.length, paidCount, pendingCount, overdueCount, paid, pending, overdue, draft };
+  }, [invoices, viewCurrency]);
 
   const filtered = useMemo(() => invoices.filter(inv => {
     const term = searchTerm.toLowerCase();
@@ -114,6 +123,17 @@ export default function CompanyInvoicesDetailPage() {
           </div>
           <p className="text-muted-foreground mt-0.5">All invoices · {summary.total} records</p>
         </div>
+        {/* Currency selector */}
+        <Select value={viewCurrency} onValueChange={setViewCurrency}>
+          <SelectTrigger className="w-[160px] bg-input border-border text-sm flex-shrink-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-popover border-border">
+            {CURRENCIES.map(c => (
+              <SelectItem key={c} value={c}>{CURRENCY_LABELS[c]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* KPI Cards */}
@@ -131,6 +151,7 @@ export default function CompanyInvoicesDetailPage() {
             </div>
           </CardContent>
         </Card>
+        {/* Paid — amount primary, count secondary */}
         <Card className="bg-card border-border">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -138,12 +159,14 @@ export default function CompanyInvoicesDetailPage() {
                 <CheckCircle className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-lg font-bold text-primary">{fmt(summary.paid)}</p>
-                <p className="text-xs text-muted-foreground">Paid</p>
+                <p className="text-sm text-muted-foreground">Paid ({viewCurrency})</p>
+                <p className="text-xl font-bold text-primary">{fmtCurrency(summary.paid, viewCurrency)}</p>
+                <p className="text-xs text-muted-foreground">{summary.paidCount} invoice{summary.paidCount !== 1 ? 's' : ''}</p>
               </div>
             </div>
           </CardContent>
         </Card>
+        {/* Pending — amount primary, count secondary */}
         <Card className="bg-card border-border">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -151,12 +174,14 @@ export default function CompanyInvoicesDetailPage() {
                 <DollarSign className="h-5 w-5 text-chart-3" />
               </div>
               <div>
-                <p className="text-lg font-bold text-chart-3">{fmt(summary.pending)}</p>
-                <p className="text-xs text-muted-foreground">Pending (Sent)</p>
+                <p className="text-sm text-muted-foreground">Pending ({viewCurrency})</p>
+                <p className="text-xl font-bold text-chart-3">{fmtCurrency(summary.pending, viewCurrency)}</p>
+                <p className="text-xs text-muted-foreground">{summary.pendingCount} invoice{summary.pendingCount !== 1 ? 's' : ''}</p>
               </div>
             </div>
           </CardContent>
         </Card>
+        {/* Overdue — amount primary, count secondary */}
         <Card className="bg-card border-border">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -164,8 +189,9 @@ export default function CompanyInvoicesDetailPage() {
                 <AlertCircle className="h-5 w-5 text-destructive" />
               </div>
               <div>
-                <p className="text-lg font-bold text-destructive">{fmt(summary.overdue)}</p>
-                <p className="text-xs text-muted-foreground">Overdue</p>
+                <p className="text-sm text-muted-foreground">Overdue ({viewCurrency})</p>
+                <p className="text-xl font-bold text-destructive">{fmtCurrency(summary.overdue, viewCurrency)}</p>
+                <p className="text-xs text-muted-foreground">{summary.overdueCount} invoice{summary.overdueCount !== 1 ? 's' : ''}</p>
               </div>
             </div>
           </CardContent>
@@ -283,7 +309,7 @@ export default function CompanyInvoicesDetailPage() {
                             : '—'}
                         </td>
                         <td className="px-4 py-3 font-semibold text-foreground whitespace-nowrap">
-                          {fmt(Number(inv.amount))}
+                          {fmtCurrency(Number(inv.amount), inv.currency ?? 'NLE')}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[inv.status]}`}>

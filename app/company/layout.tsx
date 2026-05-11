@@ -12,7 +12,8 @@ import { AlertCircle, ArrowLeft, WifiOff, RefreshCw } from 'lucide-react';
 import type { Service } from '@/lib/types';
 
 const ALLOWED          = ['COMPANY_ADMIN', 'STAFF', 'CEO', 'SUPER_ADMIN', 'RAKEL_ADMIN'];
-const COMPANY_REQUIRED = ['COMPANY_ADMIN', 'STAFF'];
+// STAFF no longer require a company — they select one per-submission in the Upload Hub
+const COMPANY_REQUIRED = ['COMPANY_ADMIN'];
 
 export default function CompanyLayout({ children }: { children: React.ReactNode }) {
   const { user, authStatus, refreshUser, logout } = useAuth();

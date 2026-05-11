@@ -27,6 +27,7 @@ export const CreateDocumentSchema = z.object({
   description:      z.string().max(500).optional(),
   companyId:        optionalId,
   serviceId:        optionalId,
+  contractId:       optionalId,
   dateReceived:     z.coerce.date().optional(),
   expiryDate:       z.coerce.date().optional(),
   reminderSettings: z.array(z.enum(REMINDER_INTERVALS)).max(5).optional(),

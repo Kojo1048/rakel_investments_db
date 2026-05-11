@@ -57,7 +57,7 @@ export function DataTable<T extends object>({
             </TableRow>
           ) : (
             data.map((item, index) => (
-              <TableRow key={index} className="hover:bg-muted/30">
+              <TableRow key={(item as any).id ?? index} className="hover:bg-muted/30">
                 {columns.map((column) => (
                   <TableCell key={String(column.key)} className={column.className}>
                     {column.render

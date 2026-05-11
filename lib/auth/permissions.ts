@@ -80,8 +80,8 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'documents:read', 'documents:upload',
     'data_import:write',
     'operations:read', 'operations:write',
-    'contracts:read',
-    'invoices:read',
+    'contracts:read',  'contracts:write',
+    'invoices:read',   'invoices:write',
   ],
 };
 
@@ -105,6 +105,8 @@ export function requireRole(session: SessionPayload | null, ...roles: UserRole[]
 
 export function requireCompanyAccess(session: SessionPayload, targetCompanyId: string): void {
   if (session.role === 'SUPER_ADMIN' || session.role === 'RAKEL_ADMIN' || session.role === 'CEO') return;
+  // STAFF submit data on behalf of any company they select — no company lock
+  if (session.role === 'STAFF') return;
   if (session.companyId !== targetCompanyId) throw new AuthError('Forbidden', 403);
 }
 

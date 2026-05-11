@@ -173,6 +173,7 @@ model Invoice {
   invoiceNumber String        @unique
   client        String
   amount        Decimal       @db.Decimal(14, 2)
+  currency      String        @default("NLE")
   status        InvoiceStatus @default(DRAFT)
   issueDate     DateTime      @db.Date
   dueDate       DateTime?     @db.Date

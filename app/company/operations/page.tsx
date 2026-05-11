@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,12 +37,18 @@ const DEPARTMENTS = [
 
 export default function OperationsPage() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
   const [records,   setRecords]   = useState<OperationsRecord[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
+
+  // Auto-open the form when navigated here with ?new=true (e.g. from admin quick-action button)
+  useEffect(() => {
+    if (searchParams.get('new') === 'true') setIsFormOpen(true);
+  }, [searchParams]);
   const [timeRange,  setTimeRange]  = useState('30');
   const [submitError, setSubmitError] = useState('');
 

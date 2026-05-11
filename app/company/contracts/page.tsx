@@ -9,11 +9,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Spinner } from '@/components/ui/spinner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { Plus, FileText, FolderOpen, TrendingUp, Filter, Upload, Eye, Download, BookOpen, ArrowLeft, AlertCircle, Pencil, Trash2 } from 'lucide-react';
+import { Plus, FileText, FolderOpen, Filter, Upload, Eye, Download, BookOpen, ArrowLeft, AlertCircle, Pencil, Trash2 } from 'lucide-react';
+import { ContractsGrowthChart } from '@/components/contracts-growth-chart';
 import type { Contract, Company, ContractStatus, ReminderInterval } from '@/lib/types';
 import { REMINDER_INTERVAL_LABELS } from '@/lib/types';
-import { CHART_TOOLTIP_STYLE } from '@/lib/chart-config';
 import { canSelectAnyCompany } from '@/lib/utils/rakel-staff';
 
 const STATUS_COLORS: Record<ContractStatus, string> = {
@@ -102,7 +101,18 @@ export default function CompanyContractsPage() {
 
   // ── Submit ──────────────────────────────────────────────────────────────────
   const handleCreate = async () => {
-    if (!form.title) return;
+    const missing: string[] = [];
+    if (!form.title.trim())          missing.push('Contract Title');
+    if (!form.contractNumber.trim()) missing.push('Contract Number');
+    if (!form.client.trim())         missing.push('Client Name');
+    if (!form.startDate)             missing.push('Start Date');
+    if (!form.expiryDate)            missing.push('Expiry Date');
+    if (!form.description.trim())    missing.push('Description');
+    if (!attachFile)                 missing.push('Contract File');
+    if (missing.length > 0) {
+      setSubmitError(`Required fields missing: ${missing.join(', ')}.`);
+      return;
+    }
     setSubmitting(true);
     setSubmitError('');
     try {
@@ -254,20 +264,6 @@ export default function CompanyContractsPage() {
     return counts;
   }, [contracts]);
 
-  const contractsOverTime = useMemo(() => {
-    // Use createdAt (actual creation date), not upload timestamp
-    const grouped: Record<string, { label: string; ts: number; count: number }> = {};
-    contracts.forEach(c => {
-      const d   = new Date(c.createdAt);
-      const key = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-      if (!grouped[key]) grouped[key] = { label: key, ts: d.getTime(), count: 0 };
-      grouped[key].count += 1;
-    });
-    // Sort oldest → newest so the line chart inclines correctly
-    return Object.values(grouped)
-      .sort((a, b) => a.ts - b.ts)
-      .map(({ label, count }) => ({ month: label, count }));
-  }, [contracts]);
 
   const canWrite             = user?.role === 'COMPANY_ADMIN' || user?.role === 'RAKEL_ADMIN' || user?.role === 'STAFF';
   const showCompanySelector  = canSelectAnyCompany(user);
@@ -413,7 +409,8 @@ export default function CompanyContractsPage() {
 
                 <div className="flex gap-2 pt-2">
                   <Button variant="outline" className="flex-1 border-border" onClick={() => setIsFormOpen(false)}>Cancel</Button>
-                  <Button className="flex-1 bg-primary text-primary-foreground" onClick={handleCreate} disabled={submitting || !form.title}>
+                  <Button className="flex-1 bg-primary text-primary-foreground" onClick={handleCreate}
+                    disabled={submitting || !form.title || !form.contractNumber || !form.client || !form.startDate || !form.expiryDate || !form.description || !attachFile}>
                     {submitting ? <Spinner className="h-4 w-4" /> : 'Create Contract'}
                   </Button>
                 </div>
@@ -435,23 +432,8 @@ export default function CompanyContractsPage() {
         ))}
       </div>
 
-      {/* ── Chart ──────────────────────────────────────────────────────────── */}
-      {contractsOverTime.length > 1 && (
-        <Card className="bg-card border-border">
-          <CardHeader><CardTitle className="text-foreground flex items-center gap-2"><TrendingUp className="h-5 w-5 text-primary" />Contracts Over Time</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={contractsOverTime}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} allowDecimals={false} />
-                <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                <Line type="monotone" dataKey="count" name="Contracts" stroke="hsl(160, 60%, 45%)" strokeWidth={2} dot={{ fill: 'hsl(160, 60%, 45%)' }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      )}
+      {/* ── Cumulative contracts growth chart ────────────────────────────── */}
+      <ContractsGrowthChart contracts={contracts} multiCompany={companies.length > 1} />
 
       {/* ── Filters ────────────────────────────────────────────────────────── */}
       <Card className="bg-card border-border">

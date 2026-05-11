@@ -1,9 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Required to enable instrumentation.ts startup hook in Next.js < 15
-  experimental: {
-    instrumentationHook: true,
-  },
+  
   typescript: {
     ignoreBuildErrors: true,
   },

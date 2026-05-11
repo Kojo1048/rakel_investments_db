@@ -7,12 +7,10 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/theme-toggle';
 import {
-  Building2, LayoutDashboard, Users, FileText, BarChart3, Settings, LogOut,
-  Upload, Building, Stethoscope, Sparkles, Truck, Package, Droplets,
-  Thermometer, Sun, Activity, ChevronRight, FolderOpen, UserCheck, Crown,
+  Building2, LayoutDashboard, Users, FileText, Settings, LogOut,
+  Upload, Building, ChevronRight, FolderOpen, UserCheck, Crown,
   ClipboardList, Receipt, FileSignature, FileBarChart2, Database,
 } from 'lucide-react';
-import type { Service } from '@/lib/types';
 
 interface NavItem {
   label: string;
@@ -21,19 +19,8 @@ interface NavItem {
 }
 
 interface DashboardSidebarProps {
-  services?: Service[];
+  services?: unknown[];  // kept for backward compat — no longer rendered
 }
-
-const iconMap: Record<string, React.ReactNode> = {
-  Stethoscope: <Stethoscope className="h-4 w-4" />,
-  Sparkles: <Sparkles className="h-4 w-4" />,
-  Building2: <Building2 className="h-4 w-4" />,
-  Truck: <Truck className="h-4 w-4" />,
-  Package: <Package className="h-4 w-4" />,
-  Droplets: <Droplets className="h-4 w-4" />,
-  Thermometer: <Thermometer className="h-4 w-4" />,
-  Sun: <Sun className="h-4 w-4" />,
-};
 
 export function DashboardSidebar({ services }: DashboardSidebarProps) {
   const pathname = usePathname();
@@ -44,7 +31,6 @@ export function DashboardSidebar({ services }: DashboardSidebarProps) {
     { label: 'Companies',     href: '/admin/companies',          icon: <Building       className="h-4 w-4" /> },
     { label: 'Users',         href: '/admin/users',              icon: <Users          className="h-4 w-4" /> },
     { label: 'Registrations', href: '/admin/registrations',      icon: <UserCheck      className="h-4 w-4" /> },
-    { label: 'Analytics',     href: '/admin/analytics',          icon: <BarChart3      className="h-4 w-4" /> },
     { label: 'Contracts',     href: '/superadmin/contracts',     icon: <FileSignature  className="h-4 w-4" /> },
     { label: 'Operations',    href: '/superadmin/operations',    icon: <ClipboardList  className="h-4 w-4" /> },
     { label: 'Invoices',      href: '/superadmin/invoices',      icon: <Receipt        className="h-4 w-4" /> },
@@ -54,25 +40,23 @@ export function DashboardSidebar({ services }: DashboardSidebarProps) {
     { label: 'Settings',      href: '/superadmin/settings',      icon: <Settings       className="h-4 w-4" /> },
   ];
 
-  // Rakel Admin — analytics accessible via Invoices / Contracts / Operations pages
   const rakelAdminNavItems: NavItem[] = [
     { label: 'Overview',   href: '/admin',                   icon: <LayoutDashboard className="h-4 w-4" /> },
     { label: 'Companies',  href: '/admin/companies',          icon: <Building        className="h-4 w-4" /> },
     { label: 'Users',      href: '/admin/users',              icon: <Users           className="h-4 w-4" /> },
     { label: 'Contracts',  href: '/company/contracts',        icon: <FileSignature   className="h-4 w-4" /> },
-    { label: 'Operations', href: '/company/operations',       icon: <ClipboardList   className="h-4 w-4" /> },
-    { label: 'Invoices',   href: '/company/invoices',         icon: <Receipt         className="h-4 w-4" /> },
+    { label: 'Operations', href: '/rakel/operations',         icon: <ClipboardList   className="h-4 w-4" /> },
+    { label: 'Invoices',   href: '/rakel/invoices',           icon: <Receipt         className="h-4 w-4" /> },
     { label: 'Documents',  href: '/admin/company-documents',  icon: <FolderOpen      className="h-4 w-4" /> },
     { label: 'Settings',   href: '/admin/settings',           icon: <Settings        className="h-4 w-4" /> },
   ];
 
   const ceoNavItems: NavItem[] = [
-    { label: 'Overview', href: '/ceo', icon: <LayoutDashboard className="h-4 w-4" /> },
-    { label: 'Analytics', href: '/ceo/analytics', icon: <BarChart3 className="h-4 w-4" /> },
-    { label: 'Contracts', href: '/company/contracts', icon: <FileSignature className="h-4 w-4" /> },
-    { label: 'Operations', href: '/company/operations', icon: <ClipboardList className="h-4 w-4" /> },
-    { label: 'Invoices', href: '/company/invoices', icon: <Receipt className="h-4 w-4" /> },
-    { label: 'Documents', href: '/ceo/documents', icon: <FolderOpen className="h-4 w-4" /> },
+    { label: 'Overview',    href: '/ceo',                   icon: <LayoutDashboard className="h-4 w-4" /> },
+    { label: 'Contracts',   href: '/company/contracts',     icon: <FileSignature   className="h-4 w-4" /> },
+    { label: 'Operations',  href: '/ceo/operations',        icon: <ClipboardList   className="h-4 w-4" /> },
+    { label: 'Invoices',    href: '/ceo/invoices',          icon: <Receipt         className="h-4 w-4" /> },
+    { label: 'Documents',   href: '/ceo/documents',         icon: <FolderOpen      className="h-4 w-4" /> },
   ];
 
   // Full module list for COMPANY_ADMIN and non-STAFF roles
@@ -181,30 +165,6 @@ export function DashboardSidebar({ services }: DashboardSidebarProps) {
             </Link>
           ))}
 
-          {/* Services Section for Company Users */}
-          {services && services.length > 0 && (
-            <>
-              <div className="mb-2 mt-6">
-                <span className="px-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Services
-                </span>
-              </div>
-              {services.map((service) => (
-                <Link key={service.id} href={`/company/services/${service.slug}`}>
-                  <Button
-                    variant="ghost"
-                    className={cn(
-                      'w-full justify-start gap-3 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-                      pathname === `/company/services/${service.slug}` && 'bg-sidebar-accent text-sidebar-primary'
-                    )}
-                  >
-                    {iconMap[service.icon] || <Activity className="h-4 w-4" />}
-                    <span className="truncate text-sm">{(service.name ?? '').split(' ').slice(0, 2).join(' ')}</span>
-                  </Button>
-                </Link>
-              ))}
-            </>
-          )}
         </nav>
 
         {/* User Info & Logout */}

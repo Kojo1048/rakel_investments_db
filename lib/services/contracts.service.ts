@@ -17,6 +17,19 @@ export async function getContracts(query: ContractQueryInput, session: SessionPa
   });
 }
 
+/** Generate a unique CNT-YYYY-NNNNNN number, retrying up to 5 times on collision. */
+async function generateContractNumber(): Promise<string> {
+  const year = new Date().getFullYear();
+  for (let i = 0; i < 5; i++) {
+    const rand = Math.floor(Math.random() * 900_000 + 100_000); // always 6 digits
+    const num  = `CNT-${year}-${rand}`;
+    const exists = await ContractsRepo.findContractByNumber(num);
+    if (!exists) return num;
+  }
+  // Extremely unlikely — fall back to timestamp-based suffix
+  return `CNT-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+}
+
 export async function createContract(input: ContractCreateInput, session: SessionPayload) {
   const companyId = input.companyId ?? session.companyId ?? null;
 
@@ -26,23 +39,53 @@ export async function createContract(input: ContractCreateInput, session: Sessio
     );
   }
 
+  // ── Resolve contract number ─────────────────────────────────────────────
+  const rawNumber = input.contractNumber?.trim() || null;
+  let contractNumber: string | null;
+
+  if (rawNumber) {
+    // Pre-check uniqueness before hitting the DB constraint
+    const existing = await ContractsRepo.findContractByNumber(rawNumber);
+    if (existing) {
+      throw new Error(
+        'Contract number already exists. Please use a different contract number, or leave it blank to auto-generate one.'
+      );
+    }
+    contractNumber = rawNumber;
+  } else {
+    // Auto-generate when the user leaves the field empty
+    contractNumber = await generateContractNumber();
+  }
+
   const data = {
     companyId,
     title:          input.title,
-    contractNumber: input.contractNumber,
-    client:         input.client,
-    status:         input.status,
-    startDate:      input.startDate,
-    expiryDate:     input.expiryDate,
-    description:    input.description,
+    contractNumber,
+    client:         input.client      ?? null,
+    status:         input.status      ?? 'PENDING',
+    startDate:      input.startDate   ?? null,
+    expiryDate:     input.expiryDate  ?? null,
+    description:    input.description ?? null,
     createdBy:      session.userId,
   };
 
-  console.log('[contracts] createContract payload:', data);
-  const contract = await ContractsRepo.createContract(data);
+  console.log('[contracts] createContract payload:', { ...data, companyId });
 
-  // Write audit log — drives the notification bell.
-  // Fire-and-forget so a log failure never rolls back the contract.
+  let contract;
+  try {
+    contract = await ContractsRepo.createContract(data);
+  } catch (err: any) {
+    // P2002 = unique constraint violation — should be caught by the pre-check above,
+    // but handle it defensively in case of a race condition.
+    if (err?.code === 'P2002') {
+      throw new Error(
+        'Contract number already exists. Please use a different contract number, or leave it blank to auto-generate one.'
+      );
+    }
+    throw err;
+  }
+
+  // Fire-and-forget audit log — never blocks the response
   createAuditLog({
     userId:      session.userId,
     username:    session.username,

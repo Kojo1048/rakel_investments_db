@@ -15,6 +15,7 @@ const invoiceSelect = {
   invoiceNumber: true,
   client: true,
   amount: true,
+  currency: true,
   status: true,
   issueDate: true,
   dueDate: true,
@@ -54,6 +55,7 @@ export async function createInvoice(data: {
   invoiceNumber: string;
   client: string;
   amount: number;
+  currency?: string;
   status?: string;
   issueDate: Date;
   dueDate?: Date;

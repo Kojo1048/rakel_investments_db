@@ -25,10 +25,29 @@ export async function login(
   ipAddress?: string,
   userAgent?: string
 ): Promise<LoginResult> {
+  // DEBUG — remove before shipping to production
+  console.log('[auth] login attempt:', { username, ip: ipAddress });
+
   const user = await findUserByUsername(username);
 
-  if (!user || !(await verifyPassword(password, user.passwordHash))) {
-    throw new Error('Invalid username or password');
+  // DEBUG — remove before production
+  console.log('[auth] user lookup:', user
+    ? { id: user.id, username: user.username, role: user.role, status: user.status, hashPrefix: user.passwordHash?.slice(0, 7) }
+    : 'NOT FOUND'
+  );
+
+  if (!user) {
+    // DEBUG — swap back to generic message before production
+    throw new Error('User not found');
+  }
+
+  const passwordMatch = await verifyPassword(password, user.passwordHash);
+  // DEBUG — remove before production
+  console.log('[auth] password match:', passwordMatch);
+
+  if (!passwordMatch) {
+    // DEBUG — swap back to generic message before production
+    throw new Error('Password incorrect');
   }
 
   if (user.status !== 'ACTIVE') {

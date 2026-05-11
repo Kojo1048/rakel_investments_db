@@ -10,6 +10,7 @@ const PROTECTED_ROUTES: Array<{ pattern: RegExp; roles: string[] }> = [
   { pattern: /^\/superadmin\/documents/, roles: ['SUPER_ADMIN', 'RAKEL_ADMIN'] },
   { pattern: /^\/superadmin/,            roles: ['SUPER_ADMIN'] },
   { pattern: /^\/admin/,                 roles: ['SUPER_ADMIN', 'RAKEL_ADMIN'] },
+  { pattern: /^\/rakel/,                 roles: ['RAKEL_ADMIN', 'SUPER_ADMIN'] },
   { pattern: /^\/ceo/,                   roles: ['CEO', 'SUPER_ADMIN'] },
   { pattern: /^\/company/,               roles: ['COMPANY_ADMIN', 'STAFF', 'SUPER_ADMIN', 'RAKEL_ADMIN', 'CEO'] },
   { pattern: /^\/dashboard/,             roles: ['COMPANY_ADMIN', 'STAFF', 'SUPER_ADMIN', 'RAKEL_ADMIN', 'CEO'] },

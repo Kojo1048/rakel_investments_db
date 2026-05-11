@@ -206,11 +206,15 @@ export default function CompaniesPage() {
                   <span className="text-sm text-muted-foreground">{company.services?.length ?? 0} services</span>
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {(company.services ?? []).map(s => (
-                    <span key={s.id} className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-secondary text-secondary-foreground">
-                      {(s.name ?? '').split(' ').slice(0, 2).join(' ')}
-                    </span>
-                  ))}
+                  {(company.services ?? []).map(s => {
+                    const svc = (s as any).service ?? s;
+                    const key = svc.id ?? (s as any).serviceId ?? svc.name;
+                    return (
+                      <span key={key} className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-secondary text-secondary-foreground">
+                        {(svc.name ?? '').split(' ').slice(0, 2).join(' ')}
+                      </span>
+                    );
+                  })}
                 </div>
                 <div className="flex gap-2 pt-2">
                   <Button variant="outline" size="sm" className="flex-1 border-border text-foreground hover:bg-muted" onClick={() => { setSelectedCompany(company); setIsViewOpen(true); }}>
@@ -264,9 +268,15 @@ export default function CompaniesPage() {
               <div>
                 <p className="text-sm font-medium text-foreground mb-2">Assigned Services</p>
                 <div className="flex flex-wrap gap-2">
-                  {(selectedCompany.services ?? []).map(s => (
-                    <span key={s.id} className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm bg-primary/10 text-primary">{s.name}</span>
-                  ))}
+                  {(selectedCompany.services ?? []).map(s => {
+                    const svc = (s as any).service ?? s;
+                    const key = svc.id ?? (s as any).serviceId ?? svc.name;
+                    return (
+                      <span key={key} className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm bg-primary/10 text-primary">
+                        {svc.name ?? s.name}
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
               <div className="flex gap-2 pt-4">

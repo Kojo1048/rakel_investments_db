@@ -142,11 +142,17 @@ export default function AdminOverviewPage() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {(company.services ?? []).slice(0, 2).map(s => (
-                    <span key={s.id} className="text-xs px-2 py-0.5 rounded bg-secondary text-secondary-foreground">
-                      {(s.name ?? '').split(' ').slice(0, 2).join(' ')}
-                    </span>
-                  ))}
+                  {(company.services ?? []).slice(0, 2).map(s => {
+                    // API returns CompanyService junction records: { service: Service, assignedAt }
+                    // Fall back to direct access so the fix is backward-compatible with any cached shapes
+                    const svc = (s as any).service ?? s;
+                    const key = svc.id ?? (s as any).serviceId ?? svc.name;
+                    return (
+                      <span key={key} className="text-xs px-2 py-0.5 rounded bg-secondary text-secondary-foreground">
+                        {(svc.name ?? '').split(' ').slice(0, 2).join(' ')}
+                      </span>
+                    );
+                  })}
                   {(company.services?.length ?? 0) > 2 && (
                     <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
                       +{(company.services?.length ?? 0) - 2} more

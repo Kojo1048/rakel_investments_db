@@ -127,6 +127,7 @@ export async function POST(req: NextRequest) {
       description:      toStr('description'),
       companyId:        toStr('companyId'),
       serviceId:        toStr('serviceId'),
+      contractId:       toStr('contractId'),
       dateReceived:     toStr('dateReceived'),
       expiryDate:       toStr('expiryDate'),
       reminderSettings: reminders.length > 0 ? reminders : undefined,
@@ -148,12 +149,43 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ── 4b. File-name business rules ─────────────────────────────────────────
+    {
+      const cat      = rawBody.category.trim();
+      const title    = rawBody.title.trim();
+      const baseName = file.name.replace(/\.[^.]+$/, '').trim(); // strip extension
+      const norm     = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+
+      if (cat === 'Invoices') {
+        // Invoice files must contain the word "invoice" (case-insensitive)
+        if (!file.name.toLowerCase().includes('invoice')) {
+          await unlink(savedFilePath).catch(() => {});
+          savedFilePath = null;
+          return NextResponse.json(
+            { error: 'Invoice file name must contain the word "invoice" (e.g. invoice_2026_001.pdf).' },
+            { status: 400 }
+          );
+        }
+      } else if (cat !== 'Operations' && title) {
+        // Contracts and all Document categories: file name (without extension) must match the title
+        if (norm(baseName) !== norm(title)) {
+          await unlink(savedFilePath).catch(() => {});
+          savedFilePath = null;
+          const entityLabel = cat === 'Contracts' ? 'Contract Title' : 'Document Title';
+          return NextResponse.json(
+            { error: `File name must match the ${entityLabel}. Expected: "${title}"` },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     // ── 5. Permission check ─────────────────────────────────────────────────
     if (parsed.data.companyId) {
       requireCompanyAccess(session, parsed.data.companyId);
     }
 
-    const { companyId, serviceId, dateReceived, expiryDate, reminderSettings, ...rest } =
+    const { companyId, serviceId, contractId, dateReceived, expiryDate, reminderSettings, ...rest } =
       parsed.data;
 
     // ── 6. Create Prisma record ─────────────────────────────────────────────
@@ -163,8 +195,9 @@ export async function POST(req: NextRequest) {
       ...rest,
       storageKey,                                            // ← always the saved path
       uploader: { connect: { id: session.userId } },
-      ...(companyId        && { company:  { connect: { id: companyId  } } }),
-      ...(serviceId        && { service:  { connect: { id: serviceId  } } }),
+      ...(companyId        && { company:   { connect: { id: companyId  } } }),
+      ...(serviceId        && { service:   { connect: { id: serviceId  } } }),
+      ...(contractId       && { contract:  { connect: { id: contractId } } }),
       ...(dateReceived     && { dateReceived }),
       ...(expiryDate       && { expiryDate }),
       ...(reminderSettings && reminderSettings.length > 0 && { reminderSettings }),

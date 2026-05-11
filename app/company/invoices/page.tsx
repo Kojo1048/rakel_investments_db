@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -42,12 +43,18 @@ async function uploadAttachment(file: File, title: string, companyId?: string) {
 
 export default function CompanyInvoicesPage() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
   const [invoices,   setInvoices]   = useState<Invoice[]>([]);
   const [contracts,  setContracts]  = useState<Contract[]>([]);
   const [companies,  setCompanies]  = useState<Company[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [isFormOpen,     setIsFormOpen]     = useState(false);
+
+  // Auto-open the New Invoice dialog when navigated here with ?new=true
+  useEffect(() => {
+    if (searchParams.get('new') === 'true') setIsFormOpen(true);
+  }, [searchParams]);
   const [isGenerateOpen, setIsGenerateOpen] = useState(false);
   const [searchTerm,     setSearchTerm]     = useState('');
   const [statusFilter,   setStatusFilter]   = useState('all');
@@ -96,7 +103,17 @@ export default function CompanyInvoicesPage() {
 
   // ── Create invoice ─────────────────────────────────────────────────────────
   const handleCreate = async () => {
-    if (!form.client || !form.amount || !form.issueDate) return;
+    const missing: string[] = [];
+    if (!form.client.trim())  missing.push('Client');
+    if (!form.amount)         missing.push('Amount');
+    if (!form.issueDate)      missing.push('Issue Date');
+    if (!form.dueDate)        missing.push('Due Date');
+    if (!form.notes.trim())   missing.push('Notes');
+    if (!attachFile)          missing.push('Invoice File');
+    if (missing.length > 0) {
+      setSubmitError(`Required fields missing: ${missing.join(', ')}.`);
+      return;
+    }
     setSubmitting(true);
     setSubmitError('');
     try {
@@ -116,8 +133,8 @@ export default function CompanyInvoicesPage() {
           amount:     parseFloat(form.amount.replace(/,/g, '')),
           status:     form.status,
           issueDate:  form.issueDate,
-          dueDate:    form.dueDate    || undefined,
-          notes:      form.notes      || undefined,
+          dueDate:    form.dueDate,
+          notes:      form.notes,
           companyId,
         }),
       });
@@ -316,7 +333,7 @@ export default function CompanyInvoicesPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label style={{ fontSize: '14px', fontWeight: 500 }}>Amount <span style={{ color: 'red' }}>*</span></label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--muted-foreground)', background: 'var(--muted)', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', flexShrink: 0 }}>USD</span>
+                      <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--muted-foreground)', background: 'var(--muted)', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', flexShrink: 0 }}>NLE</span>
                       <Input
                         type="text"
                         inputMode="decimal"
@@ -404,13 +421,13 @@ export default function CompanyInvoicesPage() {
 
                   {/* Notes */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '14px', fontWeight: 500 }}>Notes (Optional)</label>
+                    <label style={{ fontSize: '14px', fontWeight: 500 }}>Notes </label>
                     <Textarea placeholder="Additional notes..." value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="bg-input border-border" rows={2} />
                   </div>
 
                   {/* File attachment — reuses document upload system */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '14px', fontWeight: 500 }}>Attach Invoice File (Optional)</label>
+                    <label style={{ fontSize: '14px', fontWeight: 500 }}>Attach Invoice File </label>
                     <input type="file" ref={fileRef} accept=".pdf,.doc,.docx,.xlsx,.csv" onChange={e => setAttachFile(e.target.files?.[0] ?? null)} style={{ fontSize: '14px' }} />
                     {attachFile && (
                       <p style={{ fontSize: '12px', color: 'hsl(var(--muted-foreground))' }}>
@@ -422,7 +439,8 @@ export default function CompanyInvoicesPage() {
                   {submitError && <p className="text-sm text-destructive">{submitError}</p>}
                   <div className="flex gap-2 pt-2">
                     <Button variant="outline" className="flex-1 border-border" onClick={() => setIsFormOpen(false)}>Cancel</Button>
-                    <Button className="flex-1 bg-primary text-primary-foreground" onClick={handleCreate} disabled={submitting || !form.client || !form.amount}>
+                    <Button className="flex-1 bg-primary text-primary-foreground" onClick={handleCreate}
+                      disabled={submitting || !form.client || !form.amount || !form.dueDate || !form.notes || !attachFile}>
                       {submitting ? <Spinner className="h-4 w-4" /> : 'Create Invoice'}
                     </Button>
                   </div>

@@ -134,7 +134,7 @@ export default function UploadDataPage() {
               <div className="space-y-2">
                 <h4 className="text-sm font-medium text-foreground">Selected Files</h4>
                 {files.map((file, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border">
+                  <div key={`${file.name}-${file.size}`} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border">
                     <div className="flex items-center gap-3">
                       {file.type === 'csv'
                         ? <FileText className="h-5 w-5 text-chart-2" />
