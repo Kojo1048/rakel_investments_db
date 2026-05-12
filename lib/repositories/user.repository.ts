@@ -75,7 +75,7 @@ export async function findUserById(id: string) {
 // These are used only by the login flow and do NOT expose the hash to callers.
 
 export async function findUserByUsername(username: string) {
-  return db.user.findUnique({ where: { username } });
+  return db.user.findFirst({ where: { username } });
 }
 
 export async function findUserByEmail(email: string) {
