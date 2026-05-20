@@ -4,14 +4,12 @@
  * Run: npx prisma db seed
  */
 import 'dotenv/config';
-import { Pool } from 'pg';
-import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '../lib/generated/prisma';
+
+import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const adapter = new PrismaPg(pool);
-const db = new PrismaClient({ adapter, log: ['error'] });
+
+const db = new PrismaClient();
 const BCRYPT_ROUNDS = 12;
 
 async function hash(pw: string) {
@@ -38,13 +36,14 @@ async function main() {
 
   // ── Companies ────────────────────────────────────────────────────────────────
   const companySeedData = [
-    { id: 'c1', name: 'Rakel Medical', slug: 'medical', colorPrimary: '#2563eb', colorSecondary: '#60a5fa', serviceIds: ['s1', 's2'] },
+    { id: 'c1', name: 'Rakel Investments', slug: 'rakel', colorPrimary: '#2563eb', colorSecondary: '#60a5fa', serviceIds: ['s1', 's2'] },
     { id: 'c2', name: 'Green Faj Agriculture', slug: 'agriculture', colorPrimary: '#16a34a', colorSecondary: '#4ade80', serviceIds: ['s8'] },
-    { id: 'c3', name: 'Rakel Construction', slug: 'construction', colorPrimary: '#92400e', colorSecondary: '#d97706', serviceIds: ['s3', 's10'] },
-    { id: 'c4', name: 'Logistics & General Supplies', slug: 'logistics', colorPrimary: '#1d4ed8', colorSecondary: '#93c5fd', serviceIds: ['s4', 's5'] },
-    { id: 'c5', name: 'Water & Sanitation', slug: 'water', colorPrimary: '#0369a1', colorSecondary: '#38bdf8', serviceIds: ['s6'] },
-    { id: 'c6', name: 'Solar Energy', slug: 'solar', colorPrimary: '#b45309', colorSecondary: '#fbbf24', serviceIds: ['s9'] },
-    { id: 'c7', name: 'Smart Climate Solutions', slug: 'climate', colorPrimary: '#0d9488', colorSecondary: '#2dd4bf', serviceIds: ['s7'] },
+    { id: 'c3', name: 'Sahid and Cherry', slug: 'construction', colorPrimary: '#92400e', colorSecondary: '#d97706', serviceIds: ['s3', 's10'] },
+    { id: 'c4', name: 'Jalloh Gloabl Investment', slug: 'globalinv', colorPrimary: '#1d4ed8', colorSecondary: '#93c5fd', serviceIds: ['s4', 's5'] },
+    { id: 'c5', name: 'Tesat & Sillah Ent', slug: 't&s', colorPrimary: '#0369a1', colorSecondary: '#38bdf8', serviceIds: ['s6'] },
+    { id: 'c6', name: 'B&J Energey Solution', slug: 'solar', colorPrimary: '#b45309', colorSecondary: '#fbbf24', serviceIds: ['s9'] },
+    { id: 'c7', name: 'Kie Kiz Investment', slug: 'climate', colorPrimary: '#0d9488', colorSecondary: '#2dd4bf', serviceIds: ['s7'] },
+    { id: 'c8', name: 'Ruguy Enterprise', slug: 'rugy', colorPrimary: '#8ed6d0', colorsecondary: '#2dd4bf', serviceIds: []},
   ];
 
   for (const { serviceIds, ...companyData } of companySeedData) {
