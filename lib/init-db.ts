@@ -20,7 +20,7 @@ const DEFAULT_ACCOUNTS: DefaultAccount[] = [
     username: 'Admin123',
     password: 'Gideonadmin',
     role:     'SUPER_ADMIN',
-    fullName: 'Super Administrator',
+    fullName: 'Gideon Johnson',
     email:    'admin@rakel.com',
   },
   {

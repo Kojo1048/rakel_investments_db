@@ -1,3 +1,6 @@
+export const dynamic = 'force-dynamic';
+
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest, withPermission, handleAuthError } from '@/lib/auth/middleware';
 import { CompanyQuerySchema, CreateCompanySchema } from '@/lib/validations/company.schema';
@@ -18,9 +21,17 @@ export async function GET(req: NextRequest) {
     }
 
     const result = await findCompanies(parsed.data);
-    return NextResponse.json(result);
+    return NextResponse.json(result, {
+      headers:{
+        'Cache-Control': 'no-store',
+      },
+    });
   } catch (err) {
-    return handleAuthError(err);
+    console.error('[companies/get]', err);
+    return NextResponse.json(
+      { error: 'Failed to load companies'},
+      { status: 500}
+    );
   }
 }
 
@@ -50,6 +61,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ company }, { status: 201 });
   } catch (err) {
-    return handleAuthError(err);
+    console.error('[companies/post]', err);
+    return NextResponse.json(
+      { error: 'Failed to create company' },
+      { status: 500 }
+    );
   }
 }
