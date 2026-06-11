@@ -1,99 +1,136 @@
+// lib/repositories/invoices.repository.ts
+// Confirmed against actual Supabase schema:
+//   table → "Invoice"
+//   quoted columns: "companyId","contractId","invoiceNumber","issueDate","dueDate","paidDate",
+//                   "isArchived","createdBy","createdAt","updatedAt"
+//   FK: Invoice_createdBy_fkey → "User"(id)
+//   FK: Invoice_companyId_fkey → "Company"(id)
+//   FK: Invoice_contractId_fkey → "Contract"(id)
+import { randomUUID } from 'crypto';
 import { db } from '../db';
-import type { Prisma } from '@prisma/client';
+import type { InvoiceStatus } from '../types';
+
+export type { InvoiceStatus };
 
 export interface InvoiceFilters {
-  companyId?: string;
-  contractId?: string;
-  status?: string;
+  companyId?:       string;
+  contractId?:      string;
+  status?:          InvoiceStatus;
   includeArchived?: boolean;
 }
 
-const invoiceSelect = {
-  id: true,
-  companyId: true,
-  contractId: true,
-  invoiceNumber: true,
-  client: true,
-  amount: true,
-  currency: true,
-  status: true,
-  issueDate: true,
-  dueDate: true,
-  paidDate: true,
-  notes: true,
-  isArchived: true,
-  createdBy: true,
-  createdAt: true,
-  updatedAt: true,
-  company: { select: { name: true } },
-  contract: { select: { title: true, contractNumber: true } },
-  creator: { select: { username: true } },
-} satisfies Prisma.InvoiceSelect;
+const INVOICE_COLS = `
+  id, companyId, contractId, invoiceNumber, client,
+  amount, currency, status, issueDate, dueDate, paidDate,
+  notes, isArchived, createdBy, createdAt, updatedAt,
+  company:Company!Invoice_companyId_fkey(name),
+  contract:Contract!Invoice_contractId_fkey(title, contractNumber),
+  creator:User!Invoice_createdBy_fkey(username)
+`.trim();
 
+// ── findInvoices ──────────────────────────────────────────────────────────────
 export async function findInvoices(filters: InvoiceFilters) {
-  const where: Prisma.InvoiceWhereInput = {
-    ...(filters.companyId && { companyId: filters.companyId }),
-    ...(filters.contractId && { contractId: filters.contractId }),
-    ...(filters.status && { status: filters.status as any }),
-    ...(!filters.includeArchived && { isArchived: false }),
-  };
+  let query = db.from('Invoice').select(INVOICE_COLS);
 
-  return db.invoice.findMany({
-    where,
-    orderBy: { createdAt: 'desc' },
-    select: invoiceSelect,
-  });
+  if (filters.companyId)        query = query.eq('companyId', filters.companyId);
+  if (filters.contractId)       query = query.eq('contractId', filters.contractId);
+  if (filters.status)           query = query.eq('status', filters.status);
+  if (!filters.includeArchived) query = query.eq('isArchived', false);
+
+  const { data, error } = await query.order('createdAt', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
 }
 
+// ── findInvoiceById ───────────────────────────────────────────────────────────
 export async function findInvoiceById(id: string) {
-  return db.invoice.findUnique({ where: { id }, select: invoiceSelect });
+  const { data, error } = await db
+    .from('Invoice')
+    .select(INVOICE_COLS)
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
+// ── createInvoice ─────────────────────────────────────────────────────────────
 export async function createInvoice(data: {
-  companyId: string;
-  contractId?: string;
+  companyId:     string;
+  contractId?:   string;
   invoiceNumber: string;
-  client: string;
-  amount: number;
-  currency?: string;
-  status?: string;
-  issueDate: Date;
-  dueDate?: Date;
-  notes?: string;
-  createdBy: string;
+  client:        string;
+  amount:        number;
+  currency?:     string;
+  status?:       InvoiceStatus;
+  issueDate:     Date;
+  dueDate?:      Date;
+  notes?:        string;
+  createdBy:     string;
 }) {
-  return db.invoice.create({ data: data as any });
+  const { data: invoice, error } = await db
+    .from('Invoice')
+    .insert({ id: randomUUID(), ...data, updatedAt: new Date().toISOString() })
+    .select(INVOICE_COLS)
+    .single();
+  if (error) throw error;
+  return invoice;
 }
 
-export async function updateInvoice(id: string, data: Partial<{
-  client: string;
-  amount: number;
-  status: string;
-  dueDate: Date;
-  paidDate: Date;
-  notes: string;
-  isArchived: boolean;
-}>) {
-  return db.invoice.update({ where: { id }, data: data as any });
+// ── updateInvoice ─────────────────────────────────────────────────────────────
+export async function updateInvoice(
+  id: string,
+  data: Partial<{
+    client:     string;
+    amount:     number;
+    status:     InvoiceStatus;
+    dueDate:    Date;
+    paidDate:   Date;
+    notes:      string;
+    isArchived: boolean;
+  }>
+) {
+  const { data: invoice, error } = await db
+    .from('Invoice')
+    .update({ ...data, updatedAt: new Date().toISOString() })
+    .eq('id', id)
+    .select(INVOICE_COLS)
+    .single();
+  if (error) throw error;
+  return invoice;
 }
 
+// ── generateInvoiceNumber ─────────────────────────────────────────────────────
 export async function generateInvoiceNumber(_companyId?: string): Promise<string> {
-  // Count ALL invoices globally with the current-year prefix to prevent
-  // collisions across companies (per-company count causes duplicates when
-  // two companies each have N invoices → both get INV-YYYY-00N+1).
   const year   = new Date().getFullYear();
   const prefix = `INV-${year}-`;
-  const count  = await db.invoice.count({
-    where: { invoiceNumber: { startsWith: prefix } },
-  });
-  return `${prefix}${String(count + 1).padStart(4, '0')}`;
+  const { count, error } = await db
+    .from('Invoice')
+    .select('*', { count: 'exact', head: true })
+    .like('invoiceNumber', `${prefix}%`);
+  if (error) throw error;
+  return `${prefix}${String((count ?? 0) + 1).padStart(4, '0')}`;
 }
 
+// ── getInvoiceStatusSummary ───────────────────────────────────────────────────
 export async function getInvoiceStatusSummary(companyId?: string) {
-  return db.invoice.groupBy({
-    by: ['status'],
-    where: { ...(companyId && { companyId }), isArchived: false },
-    _count: true,
-    _sum: { amount: true },
-  });
+  let query = db
+    .from('Invoice')
+    .select('status, amount')
+    .eq('isArchived', false);
+  if (companyId) query = query.eq('companyId', companyId);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const groups: Record<string, { count: number; sum: number }> = {};
+  for (const row of data ?? []) {
+    if (!groups[row.status]) groups[row.status] = { count: 0, sum: 0 };
+    groups[row.status].count += 1;
+    groups[row.status].sum   += Number(row.amount ?? 0);
+  }
+  return Object.entries(groups).map(([status, { count, sum }]) => ({
+    status,
+    _count: count,
+    _sum:   { amount: sum },
+  }));
 }

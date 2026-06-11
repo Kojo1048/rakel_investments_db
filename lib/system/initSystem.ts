@@ -1,15 +1,6 @@
-/**
- * System initialiser — runs once at server startup (via instrumentation.ts).
- *
- * Responsibilities:
- *  • Ensure the "Rakel Investments" system company exists.
- *
- * Rules:
- *  • Never throws — any error is caught, logged, and the app continues.
- *  • Never modifies the database schema.
- *  • Safe to call multiple times (idempotent).
- */
-
+// lib/system/initSystem.ts
+// Confirmed against "Company" table: quoted columns isActive, createdAt, updatedAt
+import { randomUUID } from 'crypto';
 export interface SystemInitResult {
   companyCreated: boolean;
   companyId:      string | null;
@@ -22,45 +13,41 @@ export async function ensureSystemCompany(): Promise<SystemInitResult> {
   try {
     const { db } = await import('../db/index');
 
-    // Check for any company whose name contains "rakel" (case-insensitive)
-    const existing = await db.company.findFirst({
-      where:  { name: { contains: 'Rakel', mode: 'insensitive' } },
-      select: { id: true, name: true, isActive: true },
-    });
+    const { data: existing } = await db
+      .from('Company')
+      .select('id, name, isActive')
+      .ilike('name', '%rakel%')
+      .maybeSingle();
 
     if (existing) {
       result.companyId = existing.id;
-
-      // Ensure it is active
       if (!existing.isActive) {
-        await db.company.update({
-          where: { id: existing.id },
-          data:  { isActive: true },
-        });
+        await db.from('Company').update({ isActive: true, updatedAt: new Date().toISOString() }).eq('id', existing.id);
         console.log(`[initSystem] Rakel company reactivated: "${existing.name}"`);
       } else {
         console.log(`[initSystem] Rakel company OK: "${existing.name}" (id: ${existing.id})`);
       }
     } else {
-      // Create the system company
-      const created = await db.company.create({
-        data: {
+      const { data: created, error } = await db
+        .from('Company')
+        .insert({
+          id:          randomUUID(),
           name:        'Rakel Investments',
           slug:        'rakel-investments',
           description: 'System operator company — staff may upload data on behalf of any company.',
           isActive:    true,
-        },
-        select: { id: true },
-      });
-
-      result.companyId    = created.id;
+          updatedAt:   new Date().toISOString(),
+        } as any)
+        .select('id')
+        .single();
+      if (error) throw error;
+      result.companyId      = created.id;
       result.companyCreated = true;
       console.log(`[initSystem] ✓ Created "Rakel Investments" (id: ${created.id})`);
     }
   } catch (err: any) {
     result.error = err?.message ?? String(err);
     console.error('[initSystem] ✗ ensureSystemCompany failed:', err);
-    // Intentionally do NOT rethrow — startup must continue
   }
 
   return result;

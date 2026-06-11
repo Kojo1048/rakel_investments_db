@@ -35,69 +35,48 @@ export async function GET(req: NextRequest) {
     const showAll = isAdmin && req.nextUrl.searchParams.get('all') === '1';
 
     // ── Parallel queries, each filtered to the session user unless showAll ──
-    const [contracts, invoices, documents, operations] = await Promise.all([
-
-      (db as any).contract.findMany({
-        where:   showAll
-          ? { isArchived: false }
-          : { createdBy: userId, isArchived: false },
-        select:  {
-          id:        true,
-          title:     true,
-          status:    true,
-          createdAt: true,
-          company:   { select: { name: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-        take:    50,
-      }),
-
-      (db as any).invoice.findMany({
-        where:   showAll
-          ? { isArchived: false }
-          : { createdBy: userId, isArchived: false },
-        select:  {
-          id:            true,
-          invoiceNumber: true,
-          client:        true,
-          status:        true,
-          createdAt:     true,
-          company:       { select: { name: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-        take:    50,
-      }),
-
-      (db as any).document.findMany({
-        where:   showAll
-          ? { isArchived: false }
-          : { uploadedBy: userId, isArchived: false },
-        select:  {
-          id:         true,
-          title:      true,
-          category:   true,
-          uploadedAt: true,              // Document uses uploadedAt, not createdAt
-          company:    { select: { name: true } },
-        },
-        orderBy: { uploadedAt: 'desc' },
-        take:    50,
-      }),
-
-      (db as any).operationsRecord.findMany({
-        where:   showAll
-          ? {}
-          : { recordedBy: userId },      // OperationsRecord uses recordedBy
-        select:  {
-          id:           true,
-          activityType: true,
-          department:   true,
-          createdAt:    true,
-          company:      { select: { name: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-        take:    50,
-      }),
+    const [contractsRes, invoicesRes, documentsRes, operationsRes] = await Promise.all([
+      (() => {
+        let q = db.from('Contract')
+          .select('id, title, status, createdAt, company:Company!Contract_companyId_fkey(name)')
+          .eq('isArchived', false)
+          .order('createdAt', { ascending: false })
+          .limit(50);
+        if (!showAll) q = q.eq('createdBy', userId);
+        return q;
+      })(),
+      (() => {
+        let q = db.from('Invoice')
+          .select('id, invoiceNumber, client, status, createdAt, company:Company!Invoice_companyId_fkey(name)')
+          .eq('isArchived', false)
+          .order('createdAt', { ascending: false })
+          .limit(50);
+        if (!showAll) q = q.eq('createdBy', userId);
+        return q;
+      })(),
+      (() => {
+        let q = db.from('Document')
+          .select('id, title, category, uploadedAt, company:Company!Document_companyId_fkey(name)')
+          .eq('isArchived', false)
+          .order('uploadedAt', { ascending: false })
+          .limit(50);
+        if (!showAll) q = q.eq('uploadedBy', userId);
+        return q;
+      })(),
+      (() => {
+        let q = db.from('OperationsRecord')
+          .select('id, activityType, department, createdAt, company:Company!OperationsRecord_companyId_fkey(name)')
+          .order('createdAt', { ascending: false })
+          .limit(50);
+        if (!showAll) q = q.eq('recordedBy', userId);
+        return q;
+      })(),
     ]);
+
+    const contracts  = contractsRes.data  ?? [];
+    const invoices   = invoicesRes.data   ?? [];
+    const documents  = documentsRes.data  ?? [];
+    const operations = operationsRes.data ?? [];
 
     // ── Normalise into a unified shape, then sort newest-first ────────────
     const items: SubmissionItem[] = [

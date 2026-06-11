@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -36,6 +37,8 @@ const DEPARTMENTS = [
 ];
 
 export default function OperationsPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const { user } = useAuth();
   const searchParams = useSearchParams();
   const [records,   setRecords]   = useState<OperationsRecord[]>([]);
@@ -101,6 +104,7 @@ export default function OperationsPage() {
 
   useEffect(() => { fetchData(); }, [user?.companyId, timeRange]);
 
+  if (!mounted) return null;
   const handleSubmit = async () => {
     if (!form.department || !form.manpowerCount || !form.activityType || !form.performanceScore) return;
     setSubmitting(true);

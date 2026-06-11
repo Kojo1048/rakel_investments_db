@@ -6,7 +6,7 @@ export const CreateCompanySchema = z.object({
   description: z.string().max(500).optional(),
   colorPrimary: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#3b82f6'),
   colorSecondary: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#60a5fa'),
-  serviceIds: z.array(z.string().min(1)).min(1, 'At least one service required'),
+  serviceIds: z.array(z.string().min(1)).default([]),
 });
 
 export const UpdateCompanySchema = z.object({

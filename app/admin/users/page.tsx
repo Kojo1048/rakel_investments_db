@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,6 +30,8 @@ const ROLE_OPTIONS: { value: Role; label: string }[] = [
 ];
 
 export default function UsersPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const { user: currentUser } = useAuth();
   const [users,     setUsers]     = useState<User[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -82,6 +85,7 @@ export default function UsersPage() {
     return () => { ctrl.abort(); clearTimeout(timer); };
   }, []);
 
+  if (!mounted) return null;
   const filteredUsers = users.filter(u =>
     u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.role.toLowerCase().includes(searchTerm.toLowerCase()) ||

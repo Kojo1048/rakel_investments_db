@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useActionState, useEffect, useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
@@ -134,7 +135,7 @@ export default function UploadForm({ companies, services, contracts }: Props) {
       <Field label="Category" required>
         <select name="category" required style={INPUT_STYLE}>
           <option value="">Select category</option>
-          {['Reports', 'Guidelines', 'Plans', 'Manuals', 'Standards', 'Contracts', 'Other'].map(
+          {['Contracts Signed', 'Invoice', 'Business Documents', 'Submitted Bidding Documents'].map(
             (c) => (
               <option key={c} value={c}>
                 {c}

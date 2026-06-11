@@ -1,4 +1,4 @@
-import type { UserRole } from '@prisma/client';
+import type { UserRole } from '@/lib/types';
 import type { SessionPayload } from './session';
 
 export type Permission =

@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
@@ -10,6 +11,8 @@ import { Users, UserCheck, UserX } from 'lucide-react';
 import type { User } from '@/lib/types';
 
 export default function CompanyStaffPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const { user } = useAuth();
   const [staff, setStaff] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,6 +26,7 @@ export default function CompanyStaffPage() {
       .finally(() => setLoading(false));
   }, [user?.companyId]);
 
+  if (!mounted) return null;
   const active = staff.filter(s => s.status === 'ACTIVE').length;
   const inactive = staff.filter(s => s.status !== 'ACTIVE').length;
 

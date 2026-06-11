@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -36,6 +37,8 @@ function fmtDateTime(val: Date | string) {
 }
 
 export default function CompanyDocumentsDetailPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const { companyId } = useParams<{ companyId: string }>();
   const router = useRouter();
   const { user } = useAuth();
@@ -120,6 +123,8 @@ export default function CompanyDocumentsDetailPage() {
     const matchCat  = categoryFilter === 'all' || doc.category === categoryFilter;
     return matchSearch && matchType && matchCat;
   }), [documents, searchTerm, fileTypeFilter, categoryFilter]);
+
+  if (!mounted) return null;
 
   const clearFilters = () => { setSearchTerm(''); setFileTypeFilter('all'); setCategoryFilter('all'); };
   const hasFilters = searchTerm || fileTypeFilter !== 'all' || categoryFilter !== 'all';

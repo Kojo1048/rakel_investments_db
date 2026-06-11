@@ -1,5 +1,13 @@
+// lib/repositories/user.repository.ts
+// Confirmed against actual Supabase schema:
+//   table → "User"
+//   quoted columns: "passwordHash", "fullName", "companyId", "staffModules", "createdAt", "updatedAt"
+//   FK: User_companyId_fkey → "Company"(id)
+import { randomUUID } from 'crypto';
 import { db } from '../db';
-import type { UserRole, UserStatus, Prisma } from '@prisma/client';
+import type { UserRole, UserStatus } from '../types';
+
+export type { UserRole, UserStatus };
 
 export interface UserFilters {
   role?:      UserRole;
@@ -10,144 +18,147 @@ export interface UserFilters {
   limit?:     number;
 }
 
-// ── Shared SELECT shape ───────────────────────────────────────────────────────
-// This is the ONLY select used for all list/write queries.
-// It contains only fields that have always been in the schema — no migrations
-// required.  It is declared with `satisfies` so TypeScript enforces correctness.
+// Mirrors Prisma USER_SELECT — no passwordHash exposed
+const USER_COLS = `
+  id, username, email, role, status,
+  fullName, companyId, createdAt, updatedAt,
+  company:Company!User_companyId_fkey(id, name, slug)
+`.trim();
 
-export const USER_SELECT = {
-  id:        true,
-  username:  true,
-  email:     true,
-  role:      true,
-  status:    true,
-  fullName:  true,
-  companyId: true,
-  createdAt: true,
-  updatedAt: true,
-  company:   { select: { id: true, name: true, slug: true } },
-} satisfies Prisma.UserSelect;
+const USER_COLS_WITH_MODULES = `
+  id, username, email, role, status,
+  fullName, companyId, staffModules, createdAt, updatedAt,
+  company:Company!User_companyId_fkey(id, name, slug)
+`.trim();
 
-// ── Extended select — includes staffModules ───────────────────────────────────
-// Used ONLY by findUserById() (the auth/me route).
-// If the staffModules column doesn't exist yet, findUserById falls back to
-// USER_SELECT automatically via tryWithStaffModules().
-
-const USER_SELECT_WITH_MODULES = {
-  ...USER_SELECT,
-  staffModules: true,
-} as any as Prisma.UserSelect;   // `as any` bypasses stale Prisma client types
-
-// ── Helper: detect errors that mean "column not in DB yet" ───────────────────
-
-function isUnknownFieldError(err: unknown): boolean {
-  const name = (err as any)?.name ?? '';
-  const msg  = ((err as any)?.message ?? '').toLowerCase();
-  const code = (err as any)?.code ?? '';
-  return (
-    name === 'PrismaClientValidationError'  ||  // client-side field validation
-    code === 'P2022'                        ||  // column not found (runtime)
-    code === '42703'                        ||  // PostgreSQL: undefined_column
-    msg.includes('unknown field')           ||
-    msg.includes('does not exist')          ||
-    msg.includes('column not found')
-  );
-}
-
-// ── findUserById — tries with staffModules, falls back gracefully ─────────────
-
+// ── findUserById ──────────────────────────────────────────────────────────────
 export async function findUserById(id: string) {
-  try {
-    return await db.user.findUnique({
-      where:  { id },
-      select: USER_SELECT_WITH_MODULES,
-    });
-  } catch (err) {
-    if (isUnknownFieldError(err)) {
-      console.warn('[user.repository] staffModules not available — falling back to base select');
-      return db.user.findUnique({ where: { id }, select: USER_SELECT });
-    }
-    throw err;
-  }
+  const { data, error } = await db
+    .from('User')
+    .select(USER_COLS_WITH_MODULES)
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
-// ── findUserByUsername / findUserByEmail — password hash included ─────────────
-// These are used only by the login flow and do NOT expose the hash to callers.
-
+// ── findUserByUsername — used by login only, returns passwordHash ─────────────
 export async function findUserByUsername(username: string) {
-  return db.user.findFirst({ 
-    where: { username },
-    select: {
-      id: true,
-      username: true,
-      passwordHash: true,
-      role: true,
-      status: true,
-      companyId: true,
-    }
-   });
+  const { data, error } = await db
+    .from('User')
+    .select('id, username, passwordHash, role, status, companyId')
+    .eq('username', username)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
+// ── findUserByEmail ───────────────────────────────────────────────────────────
 export async function findUserByEmail(email: string) {
-  return db.user.findUnique({ where: { email } });
+  const { data, error } = await db
+    .from('User')
+    .select('id, username, email, role, status, companyId')
+    .eq('email', email)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
-// ── findUsers — list query, always uses base select ───────────────────────────
-// Never includes staffModules so this query can never fail due to schema drift.
-
+// ── findUsers ─────────────────────────────────────────────────────────────────
 export async function findUsers(filters: UserFilters = {}) {
   const { role, status, companyId, search, page = 1, limit = 20 } = filters;
 
-  const where: Prisma.UserWhereInput = {
-    ...(role      && { role }),
-    ...(status    && { status }),
-    ...(companyId && { companyId }),
-    ...(search && {
-      OR: [
-        { username: { contains: search, mode: 'insensitive' } },
-        { fullName: { contains: search, mode: 'insensitive' } },
-        { email:    { contains: search, mode: 'insensitive' } },
-      ],
-    }),
-  };
+  let query = db.from('User').select(USER_COLS, { count: 'exact' });
 
-  const [users, total] = await Promise.all([
-    db.user.findMany({
-      where,
-      select:  USER_SELECT,
-      orderBy: { createdAt: 'desc' },
-      skip:    (page - 1) * limit,
-      take:    limit,
-    }),
-    db.user.count({ where }),
-  ]);
+  if (role)      query = query.eq('role', role);
+  if (status)    query = query.eq('status', status);
+  if (companyId) query = query.eq('companyId', companyId);
+  if (search) {
+    query = query.or(
+      `username.ilike.%${search}%,fullName.ilike.%${search}%,email.ilike.%${search}%`
+    );
+  }
 
-  return { users, total, page, limit, pages: Math.ceil(total / limit) };
+  const { data, error, count } = await query
+    .order('createdAt', { ascending: false })
+    .range((page - 1) * limit, page * limit - 1);
+
+  if (error) throw error;
+  const total = count ?? 0;
+  return { users: data ?? [], total, page, limit, pages: Math.ceil(total / limit) };
 }
 
-// ── countUsers — lightweight total for dashboard stats ────────────────────────
-
-export async function countUsers(filters: Pick<UserFilters, 'role' | 'status' | 'companyId'> = {}) {
+// ── countUsers ────────────────────────────────────────────────────────────────
+export async function countUsers(
+  filters: Pick<UserFilters, 'role' | 'status' | 'companyId'> = {}
+) {
   const { role, status, companyId } = filters;
-  return db.user.count({
-    where: {
-      ...(role      && { role }),
-      ...(status    && { status }),
-      ...(companyId && { companyId }),
-    },
-  });
+  let query = db.from('User').select('*', { count: 'exact', head: true });
+  if (role)      query = query.eq('role', role);
+  if (status)    query = query.eq('status', status);
+  if (companyId) query = query.eq('companyId', companyId);
+  const { count, error } = await query;
+  if (error) throw error;
+  return count ?? 0;
 }
 
-// ── createUser / updateUser — write operations, return base select ────────────
-
-export async function createUser(data: Prisma.UserCreateInput) {
-  return db.user.create({ data, select: USER_SELECT });
+// ── createUser ────────────────────────────────────────────────────────────────
+export async function createUser(data: {
+  username:      string;
+  email?:        string;
+  passwordHash:  string;
+  role:          UserRole;
+  status?:       UserStatus;
+  fullName?:     string;
+  companyId?:    string;
+  staffModules?: unknown;
+}) {
+  const { data: user, error } = await db
+    .from('User')
+    .insert({
+      id:           randomUUID(),
+      username:     data.username,
+      email:        data.email,
+      passwordHash: data.passwordHash,
+      role:         data.role,
+      status:       data.status ?? 'PENDING',
+      fullName:     data.fullName,
+      companyId:    data.companyId,
+      staffModules: data.staffModules,
+      updatedAt:    new Date().toISOString(),
+    })
+    .select(USER_COLS)
+    .single();
+  if (error) throw error;
+  return user;
 }
 
-export async function updateUser(id: string, data: Prisma.UserUpdateInput) {
-  return db.user.update({ where: { id }, data, select: USER_SELECT });
+// ── updateUser ────────────────────────────────────────────────────────────────
+export async function updateUser(
+  id: string,
+  data: Partial<{
+    username:     string;
+    email:        string;
+    passwordHash: string;
+    role:         UserRole;
+    status:       UserStatus;
+    fullName:     string;
+    companyId:    string | null;
+    staffModules: unknown;
+  }>
+) {
+  const { data: user, error } = await db
+    .from('User')
+    .update({ ...data, updatedAt: new Date().toISOString() })
+    .eq('id', id)
+    .select(USER_COLS)
+    .single();
+  if (error) throw error;
+  return user;
 }
 
+// ── deleteUser ────────────────────────────────────────────────────────────────
 export async function deleteUser(id: string) {
-  return db.user.delete({ where: { id } });
+  const { error } = await db.from('User').delete().eq('id', id);
+  if (error) throw error;
 }

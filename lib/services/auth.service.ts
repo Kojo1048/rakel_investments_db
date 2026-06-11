@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { findUserByUsername, findUserByEmail } from '../repositories/user.repository';
 import { createAuditLog } from '../repositories/audit.repository';
@@ -66,15 +67,25 @@ export async function login(
 
   // Record the session server-side (token hash only — never store raw JWT)
   const tokenHash = await bcrypt.hash(token, 8);
-  await db.userSession.create({
-    data: {
-      userId: user.id,
-      tokenHash,
-      expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000), // 8h
-      ipAddress,
-      userAgent,
-    },
-  });
+const { error: sessionErr } = await db.from('UserSession').insert({
+  id: crypto.randomUUID(),
+
+  userId: user.id,
+  tokenHash,
+
+  expiresAt: new Date(
+    Date.now() + 8 * 60 * 60 * 1000
+  ).toISOString(),
+
+  ipAddress,
+  userAgent,
+
+  createdAt: new Date().toISOString(),
+});
+ if (sessionErr) {
+  console.error('[auth] failed to persist session:', sessionErr);
+  throw new Error('Failed to persist session');
+}
 
   // Audit log
   await createAuditLog({
@@ -91,12 +102,10 @@ export async function login(
 }
 
 export async function logout(userId: string, username: string, tokenHash?: string): Promise<void> {
-  // Invalidate the specific session if token hash provided
   if (tokenHash) {
-    await db.userSession.deleteMany({ where: { userId, tokenHash } });
+    await db.from('UserSession').delete().eq('userId', userId).eq('tokenHash', tokenHash);
   } else {
-    // Invalidate all sessions for this user
-    await db.userSession.deleteMany({ where: { userId } });
+    await db.from('UserSession').delete().eq('userId', userId);
   }
 
   await createAuditLog({

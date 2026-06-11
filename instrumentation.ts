@@ -36,6 +36,10 @@ export async function register() {
 
     // Run once on startup, then every hour
     await runReminderCheck();
-    setInterval(runReminderCheck, 60 * 60 * 1000);
+
+// Disabled during development
+if (process.env.NODE_ENV === 'production') {
+  setInterval(runReminderCheck, 60 * 60 * 1000);
+}
   }
 }

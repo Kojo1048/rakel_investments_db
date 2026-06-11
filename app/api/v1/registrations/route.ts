@@ -82,19 +82,15 @@ export async function POST(req: NextRequest) {
     // ── 5. Hash password ─────────────────────────────────────────────────────
     const passwordHash = await hashPassword(password);
 
-    // ── 6. Build Prisma-safe data object ─────────────────────────────────────
-    // staffModules is handled separately inside createRegistration() to avoid
-    // PrismaClientValidationError when the generated client predates the schema
-    // change that added the staffModules column.
     await createRegistration({
       username,
       email,
       passwordHash,
       fullName,
       requestedRole,
-      ...(reason && reason.trim()                     ? { reason: reason.trim() } : {}),
-      ...(staffModules && staffModules.length > 0     ? { staffModules }          : {}),
-      ...(companyId                                   ? { company: { connect: { id: companyId } } } : {}),
+      ...(reason && reason.trim()                 ? { reason: reason.trim() } : {}),
+      ...(staffModules && staffModules.length > 0 ? { staffModules }          : {}),
+      ...(companyId                               ? { companyId }             : {}),
     });
 
     return NextResponse.json(
@@ -105,31 +101,20 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     console.error('[registrations] POST error:', err);
 
-    // Surface the real error code so the client knows whether it is a
-    // bad-request problem or a genuine server fault.
-    const prismaCode = (err as any)?.code;
-    const message    = (err as any)?.message ?? '';
+    const supabaseCode = (err as any)?.code;
 
-    // P2002 = unique constraint violation (race condition on username/email)
-    if (prismaCode === 'P2002') {
+    // 23505 = unique constraint violation (race condition on username/email)
+    if (supabaseCode === '23505') {
       return NextResponse.json(
         { error: 'Username or email already exists.' },
         { status: 409 }
       );
     }
 
-    // P2025 = related record not found (e.g. invalid companyId)
-    if (prismaCode === 'P2025') {
+    // 23503 = foreign key violation (invalid companyId)
+    if (supabaseCode === '23503') {
       return NextResponse.json(
         { error: 'The selected company does not exist. Please choose a valid company.' },
-        { status: 400 }
-      );
-    }
-
-    // PrismaClientValidationError — unknown field or type mismatch
-    if (message.includes('PrismaClientValidationError') || message.includes('Unknown field')) {
-      return NextResponse.json(
-        { error: 'Registration failed due to a data validation error. Please try again.' },
         { status: 400 }
       );
     }

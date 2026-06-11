@@ -3,6 +3,7 @@ import { getSessionFromRequest, withPermission, handleAuthError } from '@/lib/au
 import { ContractUpdateSchema } from '@/lib/validations/contracts.schema';
 import { updateContract } from '@/lib/services/contracts.service';
 import { findContractById } from '@/lib/repositories/contracts.repository';
+import { db } from '@/lib/db';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -40,8 +41,11 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     if (!contract) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     // Soft-delete: archive instead of hard delete to preserve audit trail
-    const { db } = await import('@/lib/db');
-    await (db as any).contract.update({ where: { id }, data: { isArchived: true } });
+    const { error: archiveError } = await db
+      .from('Contract')
+      .update({ isArchived: true, updatedAt: new Date().toISOString() })
+      .eq('id', id);
+    if (archiveError) throw archiveError;
 
     console.log(`[contracts] DELETE ${id} by ${session.username}`);
     return NextResponse.json({ success: true });

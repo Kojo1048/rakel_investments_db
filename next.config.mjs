@@ -8,7 +8,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  serverExternalPackages: ['pg', 'pg-pool', '@prisma/adapter-pg', '@prisma/client', '.prisma/client', 'jsonwebtoken', 'bcryptjs', 'nodemailer'],
+  serverExternalPackages: ['jsonwebtoken', 'bcryptjs', 'nodemailer'],
 };
 
 export default nextConfig;

@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +12,8 @@ import { safeGet } from '@/lib/utils/safe-fetch';
 import { ContractsGrowthChart } from '@/components/contracts-growth-chart';
 
 export default function CEODashboard() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const { user } = useAuth();
   const [companies,           setCompanies]           = useState<Company[]>([]);
   const [contracts,           setContracts]           = useState<Contract[]>([]);
@@ -32,6 +35,7 @@ export default function CEODashboard() {
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
+  if (!mounted) return null;
   const activeContractCount = contracts.filter(c => c.status === 'ACTIVE').length;
 
   if (loading) {

@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -17,6 +18,8 @@ import type { AnalyticsRecord, Service } from '@/lib/types';
 import { CHART_TOOLTIP_STYLE } from '@/lib/chart-config';
 
 export default function ServiceDashboardPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
@@ -64,6 +67,7 @@ export default function ServiceDashboardPage() {
     });
     return Object.values(grouped).slice(-14);
   }, [analytics]);
+  if (!mounted) return null;
 
   if (loading) {
     return <div className="flex justify-center py-16"><Spinner className="h-8 w-8 text-primary" /></div>;

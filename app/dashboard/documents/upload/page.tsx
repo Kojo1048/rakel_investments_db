@@ -20,25 +20,24 @@ export default async function UploadDocumentPage() {
   if (!canUpload) redirect('/');
 
   // ── Fetch dropdown data (server-side, no waterfall) ───────────────────────
-  const [companies, services, contracts] = await Promise.all([
-    (db as any).company.findMany({
-      where: session.role === 'COMPANY_ADMIN' || session.role === 'STAFF'
-        ? { id: session.companyId ?? undefined }
-        : undefined,
-      select: { id: true, name: true },
-      orderBy: { name: 'asc' },
-    }),
-    (db as any).service.findMany({
-      select: { id: true, name: true },
-      orderBy: { name: 'asc' },
-    }),
-    (db as any).contract.findMany({
-      where: session.companyId ? { companyId: session.companyId } : undefined,
-      select: { id: true, title: true, contractNumber: true },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    }),
+  const [companiesRes, servicesRes, contractsRes] = await Promise.all([
+    (() => {
+      let q = db.from('Company').select('id, name').order('name', { ascending: true });
+      if ((session.role === 'COMPANY_ADMIN' || session.role === 'STAFF') && session.companyId) {
+        q = q.eq('id', session.companyId);
+      }
+      return q;
+    })(),
+    db.from('Service').select('id, name').order('name', { ascending: true }),
+    (() => {
+      let q = db.from('Contract').select('id, title, contractNumber').order('createdAt', { ascending: false }).limit(50);
+      if (session.companyId) q = q.eq('companyId', session.companyId);
+      return q;
+    })(),
   ]);
+  const companies = companiesRes.data ?? [];
+  const services  = servicesRes.data  ?? [];
+  const contracts = contractsRes.data ?? [];
 
   return (
     <div

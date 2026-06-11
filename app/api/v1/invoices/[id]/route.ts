@@ -3,6 +3,7 @@ import { getSessionFromRequest, withPermission, handleAuthError } from '@/lib/au
 import { InvoiceUpdateSchema } from '@/lib/validations/invoices.schema';
 import { updateInvoice } from '@/lib/services/invoices.service';
 import { findInvoiceById } from '@/lib/repositories/invoices.repository';
+import { db } from '@/lib/db';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -40,8 +41,11 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     // Soft-delete: archive so the record stays in the audit trail
-    const { db } = await import('@/lib/db');
-    await (db as any).invoice.update({ where: { id }, data: { isArchived: true } });
+    const { error: archiveError } = await db
+      .from('Invoice')
+      .update({ isArchived: true, updatedAt: new Date().toISOString() })
+      .eq('id', id);
+    if (archiveError) throw archiveError;
 
     console.log(`[invoices] DELETE ${id} by ${session.username}`);
     return NextResponse.json({ success: true });

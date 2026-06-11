@@ -1,15 +1,19 @@
-import { PrismaClient } from '@prisma/client'
+// lib/db/index.ts
+// Service-role Supabase client — bypasses RLS for all server-side operations.
+import { createClient } from '@supabase/supabase-js';
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
-}
+const globalForSupabase = globalThis as unknown as {
+  supabaseDb: ReturnType<typeof createClient> | undefined;
+};
 
 export const db =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
-  })
+  globalForSupabase.supabaseDb ??
+  createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
 
 if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = db
+  globalForSupabase.supabaseDb = db;
 }

@@ -1,6 +1,8 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
+// ... rest of file unchanged
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -42,6 +44,8 @@ async function uploadAttachment(file: File, title: string, companyId?: string) {
 }
 
 export default function CompanyInvoicesPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const { user } = useAuth();
   const searchParams = useSearchParams();
   const [invoices,   setInvoices]   = useState<Invoice[]>([]);
@@ -101,6 +105,7 @@ export default function CompanyInvoicesPage() {
 
   useEffect(() => { fetchData(); }, [user?.companyId]);
 
+  if (!mounted) return null;
   // ── Create invoice ─────────────────────────────────────────────────────────
   const handleCreate = async () => {
     const missing: string[] = [];

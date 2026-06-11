@@ -20,13 +20,13 @@ export async function createUser(input: CreateUserInput, actor: SessionPayload) 
   const passwordHash = await hashPassword(input.password);
 
   const user = await UserRepo.createUser({
-    username: input.username,
-    email: input.email,
+    username:  input.username,
+    email:     input.email,
     passwordHash,
-    fullName: input.fullName,
-    role: input.role,
-    status: input.status ?? 'ACTIVE',
-    ...(input.companyId && { company: { connect: { id: input.companyId } } }),
+    fullName:  input.fullName,
+    role:      input.role,
+    status:    input.status ?? 'ACTIVE',
+    companyId: input.companyId,
   });
 
   await createAuditLog({
@@ -49,9 +49,7 @@ export async function updateUser(id: string, input: UpdateUserInput, actor: Sess
     ...(input.role !== undefined && { role: input.role }),
     ...(input.status !== undefined && { status: input.status }),
     ...(input.password !== undefined && { passwordHash: await hashPassword(input.password) }),
-    ...(input.companyId !== undefined && {
-      company: input.companyId ? { connect: { id: input.companyId } } : { disconnect: true },
-    }),
+    ...(input.companyId !== undefined && { companyId: input.companyId ?? null }),
   };
 
   const user = await UserRepo.updateUser(id, updateData);
@@ -89,15 +87,14 @@ export async function approveRegistration(registrationId: string, actor: Session
   if (!reg) throw new Error('Registration not found');
 
   const user = await UserRepo.createUser({
-    username: reg.username,
-    email: reg.email,
-    passwordHash: reg.passwordHash,
-    fullName: reg.fullName,
-    role: reg.requestedRole,
-    status: 'ACTIVE',
-    ...(reg.companyId && { company: { connect: { id: reg.companyId } } }),
-    // Preserve module selections made during STAFF registration
-    ...((reg as any).staffModules ? { staffModules: (reg as any).staffModules } : {}),
+    username:     reg.username,
+    email:        reg.email ?? undefined,
+    passwordHash: (reg as any).passwordHash,
+    fullName:     reg.fullName ?? undefined,
+    role:         reg.requestedRole as any,
+    status:       'ACTIVE',
+    companyId:    reg.companyId ?? undefined,
+    staffModules: (reg as any).staffModules ?? undefined,
   });
 
   await RegistrationRepo.deleteRegistration(registrationId);

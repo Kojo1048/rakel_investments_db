@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/lib/auth-context';
@@ -40,6 +41,8 @@ async function uploadAttachment(file: File, title: string, category: string, com
 }
 
 export default function CompanyContractsPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const { user } = useAuth();
   const [contracts,  setContracts]  = useState<Contract[]>([]);
   const [companies,  setCompanies]  = useState<Company[]>([]);
@@ -264,6 +267,7 @@ export default function CompanyContractsPage() {
     return counts;
   }, [contracts]);
 
+  if (!mounted) return null;
 
   const canWrite             = user?.role === 'COMPANY_ADMIN' || user?.role === 'RAKEL_ADMIN' || user?.role === 'STAFF';
   const showCompanySelector  = canSelectAnyCompany(user);

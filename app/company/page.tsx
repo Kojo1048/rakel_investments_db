@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '@/lib/auth-context';
@@ -13,6 +14,8 @@ import { CHART_TOOLTIP_STYLE } from '@/lib/chart-config';
 import { safeGet } from '@/lib/utils/safe-fetch';
 
 export default function CompanyOverviewPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const { user, isLoading } = useAuth();
   const isStaff = user?.role === 'STAFF';
 
@@ -49,6 +52,7 @@ export default function CompanyOverviewPage() {
     }
   }, [user?.companyId, isStaff]);
 
+  if (!mounted) return null;
   if (isLoading || loading) {
     return (
       <div className="min-h-[50vh] flex items-center justify-center">

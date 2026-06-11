@@ -31,10 +31,11 @@ export async function GET(
     console.log('[download] request for document id:', id);
 
     // ── 1. Fetch record from DB ───────────────────────────────────────────────
-    const doc = await (db as any).document.findUnique({
-      where:  { id },
-      select: { id: true, filename: true, storageKey: true, fileType: true },
-    });
+    const { data: doc } = await db
+      .from('Document')
+      .select('id, filename, storageKey, fileType')
+      .eq('id', id)
+      .maybeSingle();
 
     if (!doc) {
       console.warn('[download] document not found in DB:', id);

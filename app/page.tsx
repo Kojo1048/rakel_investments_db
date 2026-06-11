@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
@@ -39,6 +40,8 @@ function PasswordStrength({ password }: { password: string }) {
 }
 
 export default function LoginPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const [isRegistering, setIsRegistering] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -83,6 +86,7 @@ export default function LoginPage() {
     return () => { ctrl.abort(); clearTimeout(timer); };
   }, [isRegistering]);
 
+  if (!mounted) return null;
   const redirectUser = (role: string) => {
     if (role === 'SUPER_ADMIN' || role === 'RAKEL_ADMIN') router.push('/admin');
     else if (role === 'CEO') router.push('/ceo');

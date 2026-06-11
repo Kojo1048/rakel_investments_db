@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/lib/auth/session';
 
-// jsonwebtoken uses Node.js crypto — must run in Node.js, not Edge runtime.
-export const runtime = 'nodejs';
-
 // ── Route access rules ────────────────────────────────────────────────────────
 // More-specific patterns must come BEFORE broader ones (first match wins).
 const PROTECTED_ROUTES: Array<{ pattern: RegExp; roles: string[] }> = [
@@ -29,7 +26,7 @@ const REDIRECT_STUBS = new Set([
   '/invoices',   '/documents',  '/settings',
 ]);
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // ── 1. Always skip — static assets and Next.js internals ─────────────────

@@ -1,15 +1,11 @@
-/**
- * Document expiry reminder engine.
- * Called on server startup and every hour via instrumentation.ts.
- *
- * For each document with an expiryDate and reminderSettings:
- *   - For each selected interval, check if we are within that window
- *   - If yes and the reminder has not been sent yet → create AuditLog notification + mark sent
- */
-
+// lib/reminders.ts
+// Confirmed against "Document" table:
+//   quoted columns: "expiryDate","reminderSettings","reminderSent","companyId","uploadedBy","isArchived"
+// Confirmed against "AuditLog" table:
+//   quoted columns: "userId","targetEntity","companyId"
+import { randomUUID } from 'crypto';
 import type { ReminderInterval } from './types';
 
-// How many ms before expiry each interval represents
 const INTERVAL_MS: Record<ReminderInterval, number> = {
   '1_MONTH': 30 * 24 * 60 * 60 * 1000,
   '2_WEEKS': 14 * 24 * 60 * 60 * 1000,
@@ -18,85 +14,62 @@ const INTERVAL_MS: Record<ReminderInterval, number> = {
   '3_HOURS':      3 * 60 * 60 * 1000,
 };
 
-const INTERVAL_LABEL: Record<ReminderInterval, string> = {
-  '1_MONTH': '1 month',
-  '2_WEEKS': '2 weeks',
-  '1_WEEK':  '1 week',
-  '2_DAYS':  '2 days',
-  '3_HOURS': '3 hours',
-};
-
 export async function checkDocumentReminders(): Promise<void> {
   const { db } = await import('./db/index');
   const now = new Date();
 
-  // Only fetch documents that have an expiry date and reminder settings configured
-  const docs = await db.document.findMany({
-    where: {
-      expiryDate:       { not: null },
-      reminderSettings: { not: null },
-      isArchived:       false,
-    },
-    select: {
-      id:               true,
-      title:            true,
-      expiryDate:       true,
-      reminderSettings: true,
-      reminderSent:     true,
-      companyId:        true,
-      uploadedBy:       true,
-    },
-  });
+  const { data: docs, error } = await db
+    .from('Document')
+    .select('id, title, expiryDate, reminderSettings, reminderSent, companyId, uploadedBy')
+    .not('expiryDate', 'is', null)
+    .not('reminderSettings', 'is', null)
+    .eq('isArchived', false);
+
+  if (error) {
+    console.error('[reminders] Failed to fetch documents:', error);
+    return;
+  }
 
   let created = 0;
 
-  for (const doc of docs) {
+  for (const doc of docs ?? []) {
     if (!doc.expiryDate) continue;
 
-    const settings  = (doc.reminderSettings  as ReminderInterval[] | null) ?? [];
-    const sent      = (doc.reminderSent       as Partial<Record<ReminderInterval, string>> | null) ?? {};
-    const expiryMs  = new Date(doc.expiryDate).getTime();
-    const msToExpiry = expiryMs - now.getTime();
+    const settings   = (doc.reminderSettings  as ReminderInterval[] | null) ?? [];
+    const sent       = (doc.reminderSent       as Partial<Record<ReminderInterval, string>> | null) ?? {};
+    const msToExpiry = new Date(doc.expiryDate).getTime() - now.getTime();
 
     for (const interval of settings) {
       const windowMs = INTERVAL_MS[interval];
-      if (!windowMs) continue;
+      if (!windowMs || sent[interval]) continue;
 
-      // Fire when we are within the reminder window AND haven't sent it yet
-      const alreadySent = Boolean(sent[interval]);
-      if (msToExpiry <= windowMs && !alreadySent) {
+      if (msToExpiry <= windowMs) {
         const daysRemaining = Math.max(0, Math.ceil(msToExpiry / (1000 * 60 * 60 * 24)));
-        const expiryStr     = new Date(doc.expiryDate).toLocaleDateString('en-GB', {
+        const expiryStr = new Date(doc.expiryDate).toLocaleDateString('en-GB', {
           day: '2-digit', month: 'short', year: 'numeric',
         });
 
         try {
-          // Create notification via AuditLog (surfaced by /api/v1/notifications)
-          await db.auditLog.create({
-            data: {
-              userId:       doc.uploadedBy,
-              username:     'system',
-              action:       'DOCUMENT_EXPIRY_REMINDER',
-              details:      `Document "${doc.title}" expires in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'} (${expiryStr})`,
-              targetEntity: doc.title,
-              companyId:    doc.companyId ?? undefined,
-              metadata:     { interval, expiryDate: doc.expiryDate, documentId: doc.id },
-            },
+          const { error: auditErr } = await db.from('AuditLog').insert({
+            id:           randomUUID(),
+            userId:       doc.uploadedBy,
+            username:     'system',
+            action:       'DOCUMENT_EXPIRY_REMINDER',
+            details:      `Document "${doc.title}" expires in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'} (${expiryStr})`,
+            targetEntity: doc.title,
+            companyId:    doc.companyId ?? undefined,
+            metadata:     { interval, expiryDate: doc.expiryDate, documentId: doc.id },
           });
+          if (auditErr) throw auditErr;
 
-          // Mark this interval as sent so it doesn't fire again
-          await db.document.update({
-            where: { id: doc.id },
-            data: {
-              reminderSent: { ...sent, [interval]: now.toISOString() },
-            },
-          });
+          const { error: updErr } = await db
+            .from('Document')
+            .update({ reminderSent: { ...sent, [interval]: now.toISOString() } })
+            .eq('id', doc.id);
+          if (updErr) throw updErr;
 
           created++;
-          console.log(
-            `[reminders] ✓ ${interval} reminder for "${doc.title}" ` +
-            `(expires ${expiryStr}, ${daysRemaining}d remaining)`
-          );
+          console.log(`[reminders] ✓ ${interval} reminder for "${doc.title}" (${daysRemaining}d remaining)`);
         } catch (err) {
           console.error(`[reminders] Failed to send reminder for ${doc.id}:`, err);
         }
@@ -104,7 +77,5 @@ export async function checkDocumentReminders(): Promise<void> {
     }
   }
 
-  if (created > 0) {
-    console.log(`[reminders] Created ${created} document expiry reminder(s)`);
-  }
+  if (created > 0) console.log(`[reminders] Created ${created} document expiry reminder(s)`);
 }

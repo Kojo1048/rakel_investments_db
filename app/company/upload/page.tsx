@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
@@ -18,6 +19,8 @@ interface UploadedFile {
 }
 
 export default function UploadDataPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const { user } = useAuth();
   const [selectedService, setSelectedService] = useState<string>('');
   const [files, setFiles] = useState<UploadedFile[]>([]);
@@ -52,6 +55,7 @@ export default function UploadDataPage() {
     if (e.target.files) processFiles(Array.from(e.target.files));
   }, []);
 
+  if (!mounted) return null;
   const processFiles = (newFiles: File[]) => {
     const valid = newFiles.filter(f => {
       const ext = f.name.split('.').pop()?.toLowerCase();

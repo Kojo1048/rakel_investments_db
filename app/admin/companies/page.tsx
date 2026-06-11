@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -7,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FieldGroup, Field, FieldLabel } from '@/components/ui/field';
 import { Spinner } from '@/components/ui/spinner';
-import { Building, Plus, Search, Package, Eye, BarChart3, Trash2 } from 'lucide-react';
+import { Building, Plus, Search, Package, Eye, BarChart3, Trash2, Pencil } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
@@ -16,21 +17,35 @@ import type { Company, Service } from '@/lib/types';
 
 export default function CompaniesPage() {
   const router = useRouter();
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [companies,  setCompanies]  = useState<Company[]>([]);
+  const [services,   setServices]   = useState<Service[]>([]);
+  const [loading,    setLoading]    = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [isViewOpen, setIsViewOpen] = useState(false);
-  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [addError, setAddError] = useState('');
-  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const [newName, setNewName] = useState('');
-  const [newSlug, setNewSlug] = useState('');
+  // ── Add company ────────────────────────────────────────────────────────────
+  const [isAddOpen,    setIsAddOpen]    = useState(false);
+  const [submitting,   setSubmitting]   = useState(false);
+  const [addError,     setAddError]     = useState('');
+  const [newName,      setNewName]      = useState('');
+  const [newSlug,      setNewSlug]      = useState('');
   const [newServiceIds, setNewServiceIds] = useState<string[]>([]);
 
+  // ── View company ───────────────────────────────────────────────────────────
+  const [isViewOpen,       setIsViewOpen]       = useState(false);
+  const [selectedCompany,  setSelectedCompany]  = useState<Company | null>(null);
+
+  // ── Edit company ───────────────────────────────────────────────────────────
+  const [isEditOpen,     setIsEditOpen]     = useState(false);
+  const [editCompany,    setEditCompany]    = useState<Company | null>(null);
+  const [editName,       setEditName]       = useState('');
+  const [editServiceIds, setEditServiceIds] = useState<string[]>([]);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editError,      setEditError]      = useState('');
+
+  // ── Delete ─────────────────────────────────────────────────────────────────
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // ── Data loading ───────────────────────────────────────────────────────────
   const fetchCompanies = () => {
     setLoading(true);
     const ctrl  = new AbortController();
@@ -38,7 +53,7 @@ export default function CompaniesPage() {
     fetch('/api/v1/companies', { credentials: 'include', signal: ctrl.signal })
       .then(r => r.ok ? r.json() : { companies: [] })
       .then(data => setCompanies(data.companies ?? []))
-      .catch(() => setCompanies([]))                    // always set state
+      .catch(() => setCompanies([]))
       .finally(() => { clearTimeout(timer); setLoading(false); });
   };
 
@@ -54,30 +69,17 @@ export default function CompaniesPage() {
     return () => { ctrl.abort(); clearTimeout(timer); };
   }, []);
 
-  const filtered = companies.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filtered = companies.filter(c =>
+    c.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  const toggleService = (id: string) => {
+  // ── Add helpers ────────────────────────────────────────────────────────────
+  const toggleNewService = (id: string) => {
     setNewServiceIds(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
   };
 
-  const handleDeleteCompany = async (id: string, name: string) => {
-    if (!confirm(`Delete "${name}"? This will remove all associated data and cannot be undone.`)) return;
-    setDeletingId(id);
-    try {
-      const res = await fetch(`/api/v1/companies/${id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      if (res.ok) fetchCompanies();
-    } catch {
-      // ignore
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
   const handleAddCompany = async () => {
-    if (!newName || !newSlug || newServiceIds.length === 0) return;
+    if (!newName || !newSlug) return;
     setSubmitting(true);
     setAddError('');
     try {
@@ -102,6 +104,79 @@ export default function CompaniesPage() {
     }
   };
 
+  // ── Edit helpers ───────────────────────────────────────────────────────────
+  const openEditCompany = (company: Company) => {
+    setEditCompany(company);
+    setEditName(company.name);
+    const currentIds = (company.services ?? [])
+      .map((s: any) => {
+        const svc = s.service ?? s;
+        return svc.id ?? s.serviceId;
+      })
+      .filter(Boolean) as string[];
+    setEditServiceIds(currentIds);
+    setEditError('');
+    setIsEditOpen(true);
+  };
+
+  const toggleEditService = (id: string) => {
+    setEditServiceIds(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
+  };
+
+  const handleEditCompany = async () => {
+    if (!editCompany || !editName.trim()) return;
+    setEditSubmitting(true);
+    setEditError('');
+    try {
+      const res = await fetch(`/api/v1/companies/${editCompany.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ name: editName.trim(), serviceIds: editServiceIds }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setEditError(data.error || 'Failed to update company');
+        return;
+      }
+      setIsEditOpen(false);
+      fetchCompanies();
+    } catch {
+      setEditError('Network error');
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
+  // ── Delete helper ──────────────────────────────────────────────────────────
+  const handleDeleteCompany = async (id: string, name: string) => {
+    if (!confirm(`Delete "${name}"? This will remove all associated data and cannot be undone.`)) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/v1/companies/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (res.ok) fetchCompanies();
+    } catch {
+      // ignore
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  // ── Shared service badge renderer ─────────────────────────────────────────
+  const renderServiceBadge = (s: any, prefix = '') => {
+    const svc = s.service ?? s;
+    const key = (prefix || '') + (svc.id ?? s.serviceId ?? svc.name);
+    return (
+      <span key={key} className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-secondary text-secondary-foreground">
+        {svc.name ?? s.name}
+      </span>
+    );
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -109,6 +184,8 @@ export default function CompaniesPage() {
           <h1 className="text-2xl font-bold text-foreground">Companies</h1>
           <p className="text-muted-foreground">Manage all registered companies in the system.</p>
         </div>
+
+        {/* ── Add Company dialog ──────────────────────────────────────────── */}
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
           <DialogTrigger asChild>
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
@@ -129,7 +206,7 @@ export default function CompaniesPage() {
                     value={newName}
                     onChange={e => {
                       setNewName(e.target.value);
-                      setNewSlug(e.target.value.toLowerCase().replace(/\s+/g, '-').replace('rakel-', ''));
+                      setNewSlug(e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''));
                     }}
                     className="bg-input border-border"
                   />
@@ -139,15 +216,21 @@ export default function CompaniesPage() {
                   <Input placeholder="e.g., logistics" value={newSlug} onChange={e => setNewSlug(e.target.value)} className="bg-input border-border" />
                 </Field>
                 <Field>
-                  <FieldLabel>Assigned Services</FieldLabel>
-                  <div className="grid grid-cols-2 gap-2 mt-2">
+                  <FieldLabel>
+                    Assigned Services
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">(optional — can be assigned later)</span>
+                  </FieldLabel>
+                  <div className="grid grid-cols-2 gap-2 mt-2 max-h-48 overflow-y-auto pr-1">
                     {services.map(s => (
                       <div key={s.id} className="flex items-center gap-2">
-                        <Checkbox id={s.id} checked={newServiceIds.includes(s.id)} onCheckedChange={() => toggleService(s.id)} />
-                        <label htmlFor={s.id} className="text-sm text-foreground cursor-pointer">{(s.name ?? '').split(' ').slice(0, 2).join(' ')}</label>
+                        <Checkbox id={`new-${s.id}`} checked={newServiceIds.includes(s.id)} onCheckedChange={() => toggleNewService(s.id)} />
+                        <label htmlFor={`new-${s.id}`} className="text-sm text-foreground cursor-pointer leading-tight">
+                          {s.name}
+                        </label>
                       </div>
                     ))}
                   </div>
+                  <p className="text-xs text-muted-foreground mt-1">{newServiceIds.length} selected</p>
                 </Field>
               </FieldGroup>
               {addError && <p className="text-sm text-destructive">{addError}</p>}
@@ -156,7 +239,7 @@ export default function CompaniesPage() {
                 <Button
                   className="flex-1 bg-primary text-primary-foreground"
                   onClick={handleAddCompany}
-                  disabled={submitting || !newName || !newSlug || newServiceIds.length === 0}
+                  disabled={submitting || !newName || !newSlug}
                 >
                   {submitting ? <Spinner className="h-4 w-4" /> : 'Create Company'}
                 </Button>
@@ -166,6 +249,7 @@ export default function CompaniesPage() {
         </Dialog>
       </div>
 
+      {/* ── Search ──────────────────────────────────────────────────────────── */}
       <Card className="bg-card border-border">
         <CardContent className="p-4">
           <div className="relative max-w-md">
@@ -175,6 +259,7 @@ export default function CompaniesPage() {
         </CardContent>
       </Card>
 
+      {/* ── Company cards ────────────────────────────────────────────────────── */}
       {loading ? (
         <div className="flex justify-center py-16"><Spinner className="h-8 w-8 text-primary" /></div>
       ) : filtered.length === 0 ? (
@@ -203,25 +288,27 @@ export default function CompaniesPage() {
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Package className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">{company.services?.length ?? 0} services</span>
+                  <span className="text-sm text-muted-foreground">
+                    {(company.services?.length ?? 0) === 0
+                      ? 'No services assigned'
+                      : `${company.services?.length} service${company.services?.length === 1 ? '' : 's'}`}
+                  </span>
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {(company.services ?? []).map(s => {
-                    const svc = (s as any).service ?? s;
-                    const key = svc.id ?? (s as any).serviceId ?? svc.name;
-                    return (
-                      <span key={key} className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-secondary text-secondary-foreground">
-                        {(svc.name ?? '').split(' ').slice(0, 2).join(' ')}
-                      </span>
-                    );
-                  })}
+                  {(company.services ?? []).map(s => renderServiceBadge(s))}
                 </div>
                 <div className="flex gap-2 pt-2">
-                  <Button variant="outline" size="sm" className="flex-1 border-border text-foreground hover:bg-muted" onClick={() => { setSelectedCompany(company); setIsViewOpen(true); }}>
+                  <Button variant="outline" size="sm" className="flex-1 border-border text-foreground hover:bg-muted"
+                    onClick={() => { setSelectedCompany(company); setIsViewOpen(true); }}>
                     <Eye className="h-3 w-3 mr-1" />View
                   </Button>
-                  <Button variant="outline" size="sm" className="flex-1 border-border text-foreground hover:bg-muted" onClick={() => router.push(`/admin/analytics?company=${company.id}`)}>
-                    <BarChart3 className="h-3 w-3 mr-1" />Analytics
+                  <Button variant="outline" size="sm" className="flex-1 border-border text-foreground hover:bg-muted"
+                    onClick={() => openEditCompany(company)}>
+                    <Pencil className="h-3 w-3 mr-1" />Edit
+                  </Button>
+                  <Button variant="outline" size="sm" className="flex-1 border-border text-foreground hover:bg-muted"
+                    onClick={() => router.push(`/admin/analytics?company=${company.id}`)}>
+                    <BarChart3 className="h-3 w-3 mr-1" />Stats
                   </Button>
                   <Button
                     variant="outline" size="sm"
@@ -229,7 +316,9 @@ export default function CompaniesPage() {
                     onClick={() => handleDeleteCompany(company.id, company.name)}
                     disabled={deletingId === company.id}
                   >
-                    {deletingId === company.id ? <span className="h-3 w-3 border border-destructive border-t-transparent rounded-full animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                    {deletingId === company.id
+                      ? <span className="h-3 w-3 border border-destructive border-t-transparent rounded-full animate-spin" />
+                      : <Trash2 className="h-3 w-3" />}
                   </Button>
                 </div>
               </CardContent>
@@ -238,6 +327,7 @@ export default function CompaniesPage() {
         </div>
       )}
 
+      {/* ── View Company dialog ──────────────────────────────────────────────── */}
       <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
         <DialogContent className="bg-card border-border max-w-lg">
           <DialogHeader>
@@ -267,26 +357,89 @@ export default function CompaniesPage() {
               </div>
               <div>
                 <p className="text-sm font-medium text-foreground mb-2">Assigned Services</p>
-                <div className="flex flex-wrap gap-2">
-                  {(selectedCompany.services ?? []).map(s => {
-                    const svc = (s as any).service ?? s;
-                    const key = svc.id ?? (s as any).serviceId ?? svc.name;
-                    return (
-                      <span key={key} className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm bg-primary/10 text-primary">
-                        {svc.name ?? s.name}
-                      </span>
-                    );
-                  })}
-                </div>
+                {(selectedCompany.services ?? []).length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic">No services assigned.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {(selectedCompany.services ?? []).map(s => {
+                      const svc = (s as any).service ?? s;
+                      const key = svc.id ?? (s as any).serviceId ?? svc.name;
+                      return (
+                        <span key={key} className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm bg-primary/10 text-primary">
+                          {svc.name ?? (s as any).name}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               <div className="flex gap-2 pt-4">
                 <Button variant="outline" className="flex-1 border-border" onClick={() => setIsViewOpen(false)}>Close</Button>
-                <Button className="flex-1 bg-primary text-primary-foreground" onClick={() => { setIsViewOpen(false); router.push(`/admin/analytics?company=${selectedCompany.id}`); }}>
+                <Button className="flex-1 bg-primary text-primary-foreground"
+                  onClick={() => { setIsViewOpen(false); router.push(`/admin/analytics?company=${selectedCompany.id}`); }}>
                   View Analytics
                 </Button>
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit Company dialog ──────────────────────────────────────────────── */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="bg-card border-border max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">Edit Company</DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Update the company name and service assignments.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <FieldGroup>
+              <Field>
+                <FieldLabel>Company Name</FieldLabel>
+                <Input
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  className="bg-input border-border"
+                />
+              </Field>
+              <Field>
+                <FieldLabel>
+                  Assigned Services
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">(companies with 0 services are allowed)</span>
+                </FieldLabel>
+                <div className="grid grid-cols-2 gap-2 mt-2 max-h-48 overflow-y-auto pr-1">
+                  {services.map(s => (
+                    <div key={s.id} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`edit-${s.id}`}
+                        checked={editServiceIds.includes(s.id)}
+                        onCheckedChange={() => toggleEditService(s.id)}
+                      />
+                      <label htmlFor={`edit-${s.id}`} className="text-sm text-foreground cursor-pointer leading-tight">
+                        {s.name}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {editServiceIds.length} service{editServiceIds.length !== 1 ? 's' : ''} selected
+                </p>
+              </Field>
+            </FieldGroup>
+            {editError && <p className="text-sm text-destructive">{editError}</p>}
+            <div className="flex gap-2 pt-4">
+              <Button variant="outline" className="flex-1 border-border" onClick={() => setIsEditOpen(false)}>Cancel</Button>
+              <Button
+                className="flex-1 bg-primary text-primary-foreground"
+                onClick={handleEditCompany}
+                disabled={editSubmitting || !editName.trim()}
+              >
+                {editSubmitting ? <Spinner className="h-4 w-4" /> : 'Save Changes'}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -77,8 +77,9 @@ export async function uploadDocument(
   const expiryDate     = toDate(formData.get('expiryDate'));
   const reminderSettings = (formData.getAll('reminderSettings') as string[]).filter(Boolean);
 
-  // ── Prisma create ────────────────────────────────────────────────────────────
+  // ── Supabase insert ──────────────────────────────────────────────────────────
   const data: Record<string, unknown> = {
+    id:          randomUUID(),
     title,
     filename:    file.name,
     fileType:    ext as AllowedFileType,
@@ -86,10 +87,10 @@ export async function uploadDocument(
     storageKey,                                                // ← always set
     category,
     description,
-    uploader: { connect: { id: session.userId } },
-    ...(companyId      && { company:  { connect: { id: companyId  } } }),
-    ...(serviceId      && { service:  { connect: { id: serviceId  } } }),
-    ...(contractId     && { contract: { connect: { id: contractId } } }),
+    uploadedBy:  session.userId,
+    ...(companyId      && { companyId }),
+    ...(serviceId      && { serviceId }),
+    ...(contractId     && { contractId }),
     ...(dateReceived   && { dateReceived }),
     ...(expiryDate     && { expiryDate }),
     ...(reminderSettings.length > 0 && { reminderSettings }),
@@ -98,10 +99,11 @@ export async function uploadDocument(
   console.log('[uploadDocument] creating record with storageKey:', storageKey);
 
   try {
-    const doc = await (db as any).document.create({ data });
+    const { data: doc, error: insertError } = await db.from('Document').insert(data).select('id, storageKey').single();
+    if (insertError) throw insertError;
     console.log('[uploadDocument] success — id:', doc.id, 'storageKey:', doc.storageKey);
   } catch (err) {
-    console.error('[uploadDocument] Prisma error:', err);
+    console.error('[uploadDocument] insert error:', err);
     return { error: 'Failed to save the document record. Please try again.' };
   }
 

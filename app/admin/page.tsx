@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,6 +48,8 @@ function timeAgo(iso: string): string {
 }
 
 export default function AdminOverviewPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const { user } = useAuth();
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
@@ -97,6 +100,7 @@ export default function AdminOverviewPage() {
     fetchNotifications(true);
   }, [fetchNotifications]);
 
+  if (!mounted) return null;
   if (loading) {
     return (
       <div className="min-h-[50vh] flex items-center justify-center">

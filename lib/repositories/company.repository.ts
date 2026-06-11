@@ -1,95 +1,134 @@
+// lib/repositories/company.repository.ts
+// Confirmed against actual Supabase schema:
+//   table → "Company"
+//   quoted columns: "isActive", "colorPrimary", "colorSecondary", "createdAt", "updatedAt"
+//   join table → "CompanyService" with FK CompanyService_companyId_fkey, CompanyService_serviceId_fkey
+import { randomUUID } from 'crypto';
 import { db } from '../db';
-import type { Prisma } from '@prisma/client';
 
-const COMPANY_WITH_SERVICES = {
-  id: true,
-  name: true,
-  slug: true,
-  description: true,
-  isActive: true,
-  colorPrimary: true,
-  colorSecondary: true,
-  createdAt: true,
-  updatedAt: true,
-  services: {
-    select: {
-      service: {
-        select: { id: true, name: true, slug: true, icon: true, description: true },
-      },
-      assignedAt: true,
-    },
-  },
-  _count: { select: { users: true, documents: true } },
-} satisfies Prisma.CompanySelect;
+const COMPANY_COLS = `
+  id, name, slug, description, isActive,
+  colorPrimary, colorSecondary, createdAt, updatedAt,
+  services:CompanyService(
+    assignedAt,
+    service:Service!CompanyService_serviceId_fkey(id, name, slug, icon, description)
+  )
+`.trim();
 
+// ── findCompanyById ───────────────────────────────────────────────────────────
 export async function findCompanyById(id: string) {
-  return db.company.findUnique({ where: { id }, select: COMPANY_WITH_SERVICES });
+  const { data, error } = await db
+    .from('Company')
+    .select(COMPANY_COLS)
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
+// ── findCompanyBySlug ─────────────────────────────────────────────────────────
 export async function findCompanyBySlug(slug: string) {
-  return db.company.findUnique({ where: { slug }, select: COMPANY_WITH_SERVICES });
+  const { data, error } = await db
+    .from('Company')
+    .select(COMPANY_COLS)
+    .eq('slug', slug)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
-export async function findCompanies(filters: { isActive?: boolean; search?: string; page?: number; limit?: number } = {}) {
+// ── findCompanies ─────────────────────────────────────────────────────────────
+export async function findCompanies(
+  filters: { isActive?: boolean; search?: string; page?: number; limit?: number } = {}
+) {
   const { isActive, search, page = 1, limit = 20 } = filters;
 
-  const where: Prisma.CompanyWhereInput = {
-    // Only apply isActive filter when explicitly requested — never hide companies by default
-    ...(isActive !== undefined && { isActive }),
-    ...(search && {
-      OR: [
-        { name: { contains: search, mode: 'insensitive' } },
-        { slug: { contains: search, mode: 'insensitive' } },
-      ],
-    }),
-  };
+  let query = db.from('Company').select(COMPANY_COLS, { count: 'exact' });
 
-  const [companies, total] = await Promise.all([
-    db.company.findMany({
-      where,
-      select: COMPANY_WITH_SERVICES,
-      orderBy: { createdAt: 'asc' },
-      skip: (page - 1) * limit,
-      take: limit,
-    }),
-    db.company.count({ where }),
-  ]);
+  if (isActive !== undefined) query = query.eq('isActive', isActive);
+  if (search) {
+    query = query.or(`name.ilike.%${search}%,slug.ilike.%${search}%`);
+  }
 
-  return { companies, total, page, limit, pages: Math.ceil(total / limit) };
+  const { data, error, count } = await query
+    .order('createdAt', { ascending: true })
+    .range((page - 1) * limit, page * limit - 1);
+
+  if (error) throw error;
+  const total = count ?? 0;
+  return { companies: data ?? [], total, page, limit, pages: Math.ceil(total / limit) };
 }
 
+// ── createCompany ─────────────────────────────────────────────────────────────
 export async function createCompany(
-  data: { name: string; slug: string; description?: string; colorPrimary?: string; colorSecondary?: string },
+  data: {
+    name:            string;
+    slug:            string;
+    description?:    string;
+    colorPrimary?:   string;
+    colorSecondary?: string;
+  },
   serviceIds: string[]
 ) {
-  return db.company.create({
-    data: {
-      ...data,
-      services: {
-        create: serviceIds.map(serviceId => ({ serviceId })),
-      },
-    },
-    select: COMPANY_WITH_SERVICES,
-  });
+  const newId = randomUUID();
+  const { data: company, error: cErr } = await db
+    .from('Company')
+    .insert({ id: newId, ...data, updatedAt: new Date().toISOString() } as any)
+    .select('id')
+    .single();
+  if (cErr) throw cErr;
+
+  const companyId: string = (company as any)?.id ?? newId;
+
+  if (serviceIds.length > 0) {
+    const { error: sErr } = await db
+      .from('CompanyService')
+      .insert(serviceIds.map(serviceId => ({ companyId, serviceId })) as any);
+    if (sErr) throw sErr;
+  }
+
+  return findCompanyById(companyId);
 }
 
+// ── updateCompany ─────────────────────────────────────────────────────────────
 export async function updateCompany(
   id: string,
-  data: Prisma.CompanyUpdateInput,
+  data: Partial<{
+    name:            string;
+    slug:            string;
+    description:     string;
+    isActive:        boolean;
+    colorPrimary:    string;
+    colorSecondary:  string;
+  }>,
   serviceIds?: string[]
 ) {
   if (serviceIds !== undefined) {
-    // Replace all service assignments in one transaction
-    await db.$transaction([
-      db.companyService.deleteMany({ where: { companyId: id } }),
-      db.companyService.createMany({
-        data: serviceIds.map(serviceId => ({ companyId: id, serviceId })),
-      }),
-    ]);
+    const { error: delErr } = await db
+      .from('CompanyService')
+      .delete()
+      .eq('companyId', id);
+    if (delErr) throw delErr;
+
+    if (serviceIds.length > 0) {
+      const { error: insErr } = await db
+        .from('CompanyService')
+        .insert(serviceIds.map(serviceId => ({ companyId: id, serviceId })) as any);
+      if (insErr) throw insErr;
+    }
   }
-  return db.company.update({ where: { id }, data, select: COMPANY_WITH_SERVICES });
+
+  const { error } = await db
+    .from('Company')
+    .update({ ...data, updatedAt: new Date().toISOString() } as any)
+    .eq('id', id);
+  if (error) throw error;
+
+  return findCompanyById(id);
 }
 
+// ── deleteCompany ─────────────────────────────────────────────────────────────
 export async function deleteCompany(id: string) {
-  return db.company.delete({ where: { id } });
+  const { error } = await db.from('Company').delete().eq('id', id);
+  if (error) throw error;
 }

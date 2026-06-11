@@ -22,70 +22,47 @@ export async function getRakelNotifications(limit = 20): Promise<RakelNotificati
   const since = new Date(Date.now() - THIRTY_DAYS);
 
   // ── Parallel fetch from all source tables ─────────────────────────────────
-  const [contracts, invoices, operations, auditLogs] = await Promise.all([
+  const [contractsRes, invoicesRes, operationsRes, auditLogsRes] = await Promise.all([
 
     // ── Contracts ────────────────────────────────────────────────────────────
-    (db as any).contract.findMany({
-      where:   { createdAt: { gte: since } },
-      select:  {
-        id: true, title: true, contractNumber: true, status: true,
-        companyId: true, createdAt: true,
-        company: { select: { name: true } },
-        creator: { select: { username: true, fullName: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take:    15,
-    }) as Promise<any[]>,
+    db.from('Contract')
+      .select('id, title, contractNumber, status, companyId, createdAt, company:Company!Contract_companyId_fkey(name), creator:User!Contract_createdBy_fkey(username, fullName)')
+      .gte('createdAt', since.toISOString())
+      .order('createdAt', { ascending: false })
+      .limit(15),
 
     // ── Invoices ─────────────────────────────────────────────────────────────
-    (db as any).invoice.findMany({
-      where:   { createdAt: { gte: since } },
-      select:  {
-        id: true, invoiceNumber: true, client: true, amount: true,
-        status: true, companyId: true, createdAt: true,
-        company: { select: { name: true } },
-        creator: { select: { username: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take:    15,
-    }) as Promise<any[]>,
+    db.from('Invoice')
+      .select('id, invoiceNumber, client, amount, status, companyId, createdAt, company:Company!Invoice_companyId_fkey(name), creator:User!Invoice_createdBy_fkey(username)')
+      .gte('createdAt', since.toISOString())
+      .order('createdAt', { ascending: false })
+      .limit(15),
 
     // ── Operations records ────────────────────────────────────────────────────
-    (db as any).operationsRecord.findMany({
-      where:   { createdAt: { gte: since } },
-      select:  {
-        id: true, activityType: true, department: true,
-        companyId: true, createdAt: true,
-        company:  { select: { name: true } },
-        recorder: { select: { username: true, fullName: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take:    15,
-    }) as Promise<any[]>,
+    db.from('OperationsRecord')
+      .select('id, activityType, department, companyId, createdAt, company:Company!OperationsRecord_companyId_fkey(name), recorder:User!OperationsRecord_recordedBy_fkey(username, fullName)')
+      .gte('createdAt', since.toISOString())
+      .order('createdAt', { ascending: false })
+      .limit(15),
 
     // ── AuditLog — supplementary events (document uploads, user actions, etc.) ─
-    (db as any).auditLog.findMany({
-      where: {
-        createdAt: { gte: since },
-        action:    {
-          in: [
-            'DOCUMENT_UPLOAD', 'DOCUMENT_DELETE',
-            'USER_CREATE', 'USER_APPROVE', 'USER_DECLINE',
-            'COMPANY_CREATE', 'COMPANY_UPDATE',
-            'REGISTRATION_SUBMIT', 'DATA_IMPORT',
-          ],
-        },
-      },
-      select: {
-        id: true, action: true, username: true,
-        details: true, targetEntity: true,
-        companyId: true, createdAt: true,
-        company: { select: { name: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take:    10,
-    }) as Promise<any[]>,
+    db.from('AuditLog')
+      .select('id, action, username, details, targetEntity, companyId, createdAt, company:Company!AuditLog_companyId_fkey(name)')
+      .gte('createdAt', since.toISOString())
+      .in('action', [
+        'DOCUMENT_UPLOAD', 'DOCUMENT_DELETE',
+        'USER_CREATE', 'USER_APPROVE', 'USER_DECLINE',
+        'COMPANY_CREATE', 'COMPANY_UPDATE',
+        'REGISTRATION_SUBMIT', 'DATA_IMPORT',
+      ])
+      .order('createdAt', { ascending: false })
+      .limit(10),
   ]);
+
+  const contracts  = contractsRes.data  ?? [];
+  const invoices   = invoicesRes.data   ?? [];
+  const operations = operationsRes.data ?? [];
+  const auditLogs  = auditLogsRes.data  ?? [];
 
   const notifications: RakelNotification[] = [];
 

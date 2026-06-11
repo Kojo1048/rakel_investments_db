@@ -14,16 +14,11 @@ export async function GET(req: NextRequest, { params }: Params) {
   try {
     withPermission(getSessionFromRequest(req), 'documents:read');
     const { id } = await params;
-    const doc = await (db as any).document.findUnique({
-      where:  { id },
-      select: {
-        id: true, title: true, filename: true, fileType: true,
-        fileSize: true, storageKey: true, category: true, description: true,
-        companyId: true, uploadedAt: true, isArchived: true,
-        company:  { select: { name: true } },
-        uploader: { select: { username: true, fullName: true } },
-      },
-    });
+    const { data: doc } = await db
+      .from('Document')
+      .select('id, title, filename, fileType, fileSize, storageKey, category, description, companyId, uploadedAt, isArchived, company:Company!Document_companyId_fkey(name), uploader:User!Document_uploadedBy_fkey(username, fullName)')
+      .eq('id', id)
+      .maybeSingle();
     if (!doc) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ document: doc });
   } catch (err) {
@@ -39,10 +34,11 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     const session = withPermission(getSessionFromRequest(req), 'documents:delete');
     const { id } = await params;
 
-    const doc = await (db as any).document.findUnique({
-      where:  { id },
-      select: { id: true, filename: true, storageKey: true, title: true },
-    });
+    const { data: doc } = await db
+      .from('Document')
+      .select('id, filename, storageKey, title')
+      .eq('id', id)
+      .maybeSingle();
     if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 });
 
     // 1. Remove the physical file (best-effort — don't fail if already missing)
@@ -58,7 +54,8 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     }
 
     // 2. Remove the database record
-    await (db as any).document.delete({ where: { id } });
+    const { error: deleteError } = await db.from('Document').delete().eq('id', id);
+    if (deleteError) throw deleteError;
 
     console.log(`[documents] DELETE ${id} ("${doc.title}") by ${session.username}`);
     return NextResponse.json({ success: true });

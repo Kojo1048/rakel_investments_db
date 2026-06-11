@@ -5,11 +5,13 @@ export async function GET() {
   try {
     // Return ALL companies — no isActive filter so system companies like
     // "Rakel Investments" always appear in the registration dropdown.
-    const companies = await db.company.findMany({
-      select:  { id: true, name: true },
-      orderBy: { name: 'asc' },
-    });
-    return NextResponse.json({ companies });
+    const { data: companies, error } = await db
+      .from('Company')
+      .select('id, name')
+      .order('name', { ascending: true });
+
+    if (error) throw error;
+    return NextResponse.json({ companies: companies ?? [] });
   } catch {
     return NextResponse.json({ companies: [] });
   }

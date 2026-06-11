@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
@@ -15,6 +16,8 @@ import { REMINDER_INTERVAL_LABELS } from '@/lib/types';
 import { safeGet } from '@/lib/utils/safe-fetch';
 
 export default function AdminDocumentsPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const { user } = useAuth();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -74,6 +77,7 @@ export default function AdminDocumentsPage() {
     });
   }, [documents, searchTerm, companyFilter, dateFilter]);
 
+  if (!mounted) return null;
   const handleUpload = async () => {
     if (!uploadTitle || !uploadFile || !uploadCategory) return;
 
@@ -175,7 +179,7 @@ export default function AdminDocumentsPage() {
                   <Select value={uploadCategory} onValueChange={setUploadCategory}>
                     <SelectTrigger className="bg-input border-border"><SelectValue placeholder="Select category" /></SelectTrigger>
                     <SelectContent className="bg-popover border-border">
-                      {['Reports', 'Guidelines', 'Plans', 'Manuals', 'Standards', 'Contracts', 'Other'].map(c => (
+                      {['Contracts Signed', 'Invoice', 'Business Documents', 'Submitted Bidding Documents'].map(c => (
                         <SelectItem key={c} value={c}>{c}</SelectItem>
                       ))}
                     </SelectContent>

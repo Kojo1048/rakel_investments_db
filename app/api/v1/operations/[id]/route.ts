@@ -8,14 +8,11 @@ export async function GET(req: NextRequest, { params }: Params) {
   try {
     withPermission(getSessionFromRequest(req), 'operations:read');
     const { id } = await params;
-    const record = await (db as any).operationsRecord.findUnique({
-      where:  { id },
-      include: {
-        company:  { select: { id: true, name: true } },
-        recorder: { select: { username: true, fullName: true } },
-        contract: { select: { title: true, contractNumber: true } },
-      },
-    });
+    const { data: record } = await db
+      .from('OperationsRecord')
+      .select('*, company:Company!OperationsRecord_companyId_fkey(id, name), recorder:User!OperationsRecord_recordedBy_fkey(username, fullName), contract:Contract!OperationsRecord_contractId_fkey(title, contractNumber)')
+      .eq('id', id)
+      .maybeSingle();
     if (!record) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ record });
   } catch (err) {
@@ -28,10 +25,11 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     const session = withPermission(getSessionFromRequest(req), 'operations:write');
     const { id } = await params;
 
-    const record = await (db as any).operationsRecord.findUnique({ where: { id } });
+    const { data: record } = await db.from('OperationsRecord').select('id').eq('id', id).maybeSingle();
     if (!record) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    await (db as any).operationsRecord.delete({ where: { id } });
+    const { error: deleteError } = await db.from('OperationsRecord').delete().eq('id', id);
+    if (deleteError) throw deleteError;
 
     console.log(`[operations] DELETE ${id} by ${session.username}`);
     return NextResponse.json({ success: true });

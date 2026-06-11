@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/lib/auth-context';
@@ -25,6 +26,8 @@ import { canSelectAnyCompany } from '@/lib/utils/rakel-staff';
 // ─── page ─────────────────────────────────────────────────────────────────────
 
 export default function CompanyDocumentsPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const { user } = useAuth();
 
   // ── list state ───────────────────────────────────────────────────────────
@@ -101,6 +104,7 @@ export default function CompanyDocumentsPage() {
     }
   }, [user?.companyId, showCompanySelector]);
 
+  if (!mounted) return null;
   // ── dialog helpers ───────────────────────────────────────────────────────
 
   const resetDialog = () => {
@@ -281,7 +285,7 @@ export default function CompanyDocumentsPage() {
                     style={{ padding: '8px 12px', border: '1px solid #ccc', borderRadius: '6px', fontSize: '14px', width: '100%', boxSizing: 'border-box' }}
                   >
                     <option value="">Select category</option>
-                    {['Reports', 'Guidelines', 'Plans', 'Manuals', 'Standards', 'Contracts', 'Other'].map(c => (
+                    {['Contracts Signed', 'Invoice', 'Business Documents', 'Submitted Bidding Documents'].map(c => (
                       <option key={c} value={c}>{c}</option>
                     ))}
                   </select>

@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/lib/auth-context';
@@ -15,6 +16,8 @@ import { CHART_TOOLTIP_STYLE } from '@/lib/chart-config';
 import { safeGet } from '@/lib/utils/safe-fetch';
 
 export default function CompanyAnalyticsPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const { user } = useAuth();
   const [analytics, setAnalytics] = useState<AnalyticsRecord[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -69,6 +72,7 @@ export default function CompanyAnalyticsPage() {
       ? Math.round(analytics.reduce((s, r) => s + r.performance, 0) / analytics.length)
       : 0,
   }), [analytics]);
+  if (!mounted) return null;
 
   return (
     <div className="space-y-6">

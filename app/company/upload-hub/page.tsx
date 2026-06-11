@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/auth-context';
@@ -53,7 +54,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 const ACTIVITY_TYPES = ['Excavation','Concreting','Welding','Installation','Inspection','Maintenance','Survey','Delivery','Assembly','Testing','Other'];
 const DEPARTMENTS    = ['Engineering','Construction','Logistics','Maintenance','Quality Control','Health & Safety','Administration','Procurement','Site Operations','Other'];
-const DOC_CATEGORIES = ['Reports','Guidelines','Plans','Manuals','Standards','Contracts','Other'];
+const DOC_CATEGORIES = ['Contracts Signed','Invoice','Business Documents','Submitted Bidding Documents'];
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -111,6 +112,8 @@ function FilePicker({ file, onChange, label = 'Attachment' }: {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function UploadHubPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const { user } = useAuth();
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -165,6 +168,17 @@ export default function UploadHubPage() {
   const [oFile,     setOFile]     = useState<File | null>(null);
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
+  // Declared before the useEffect that calls it so the const binding is
+  // initialized when the effect fires (avoids TDZ ReferenceError on first render).
+  const loadSubmissions = () => {
+    setLoadingSubs(true);
+    fetch('/api/v1/my-submissions', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : { items: [] })
+      .then(d => setSubmissions(d.items ?? []))
+      .catch(() => setSubmissions([]))
+      .finally(() => setLoadingSubs(false));
+  };
+
   useEffect(() => {
     // All users need the company list now
     fetch('/api/v1/companies', { credentials: 'include' })
@@ -182,14 +196,7 @@ export default function UploadHubPage() {
     loadSubmissions();
   }, []);
 
-  const loadSubmissions = () => {
-    setLoadingSubs(true);
-    fetch('/api/v1/my-submissions', { credentials: 'include' })
-      .then(r => r.ok ? r.json() : { items: [] })
-      .then(d => setSubmissions(d.items ?? []))
-      .catch(() => setSubmissions([]))
-      .finally(() => setLoadingSubs(false));
-  };
+  if (!mounted) return null;
 
   // ── Field-level validation ─────────────────────────────────────────────────
   // Returns a map of fieldKey → error message for every missing required field.

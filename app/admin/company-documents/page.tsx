@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
@@ -22,6 +23,8 @@ interface CompanyWithCount extends Company {
 }
 
 export default function AdminCompanyDocumentsPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const router = useRouter();
   const { user } = useAuth();
 
@@ -65,6 +68,7 @@ export default function AdminCompanyDocumentsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  if (!mounted) return null;
   const filtered = companies.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase())
   );
@@ -233,7 +237,7 @@ export default function AdminCompanyDocumentsPage() {
                       style={{ padding: '8px 12px', border: '1px solid #ccc', borderRadius: '6px', fontSize: '14px', width: '100%', boxSizing: 'border-box' }}
                     >
                       <option value="">Select category</option>
-                      {['Reports', 'Guidelines', 'Plans', 'Manuals', 'Standards', 'Contracts', 'Other'].map(c => (
+                      {['Contracts Signed', 'Invoice', 'Business Documents', 'Submitted Bidding Documents'].map(c => (
                         <option key={c} value={c}>{c}</option>
                       ))}
                     </select>
