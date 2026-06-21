@@ -1,7 +1,7 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
@@ -17,6 +17,18 @@ import { CHART_TOOLTIP_STYLE } from '@/lib/chart-config';
 import { safeGet } from '@/lib/utils/safe-fetch';
 
 export default function AnalyticsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-[50vh] flex items-center justify-center">
+        <Spinner className="h-8 w-8 text-primary" />
+      </div>
+    }>
+      <AnalyticsPageInner />
+    </Suspense>
+  );
+}
+
+function AnalyticsPageInner() {
   const searchParams = useSearchParams();
   const [selectedCompany, setSelectedCompany] = useState<string>('all');
   const [selectedService, setSelectedService] = useState<string>('all');

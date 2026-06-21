@@ -188,19 +188,23 @@ export async function POST(req: NextRequest) {
     const { companyId, serviceId, contractId, dateReceived, expiryDate, reminderSettings, ...rest } =
       parsed.data;
 
-    // ── 6. Create Prisma record ─────────────────────────────────────────────
+    // ── 6. Create document record ─────────────────────────────────────────────
     console.log('[documents] POST creating DB record — storageKey:', storageKey, 'companyId:', companyId ?? '(none)');
 
     const document = await createDocument({
       ...rest,
-      storageKey,                                            // ← always the saved path
-      uploader: { connect: { id: session.userId } },
-      ...(companyId        && { company:   { connect: { id: companyId  } } }),
-      ...(serviceId        && { service:   { connect: { id: serviceId  } } }),
-      ...(contractId       && { contract:  { connect: { id: contractId } } }),
-      ...(dateReceived     && { dateReceived }),
-      ...(expiryDate       && { expiryDate }),
-      ...(reminderSettings && reminderSettings.length > 0 && { reminderSettings }),
+      storageKey,
+
+      uploadedBy: session.userId,
+
+      companyId,
+      serviceId,
+      contractId,
+
+      dateReceived,
+      expiryDate,
+      reminderSettings,
+
     });
 
     const savedKey = (document as any).storageKey;

@@ -84,13 +84,8 @@ export default function RakelInvoicesDetailPage() {
       .finally(() => setInvoiceDocLoading(false));
   }, [viewInvoice]);
 
-  const handleViewDoc = async (doc: any) => {
-    const res = await fetch(`/api/v1/documents/${doc.id}/download`, { credentials: 'include' });
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const url  = URL.createObjectURL(blob);
-    window.open(url, '_blank');
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  const handleViewDoc = (doc: any) => {
+    if (doc.storageKey) window.open(doc.storageKey, '_blank');
   };
 
   const handleDownloadDoc = async (doc: any) => {

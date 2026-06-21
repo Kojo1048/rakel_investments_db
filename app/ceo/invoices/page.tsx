@@ -1,7 +1,7 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,18 @@ interface CompanyInvoiceRow {
 }
 
 export default function CEOInvoicesPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-[50vh] flex items-center justify-center">
+        <Spinner className="h-8 w-8 text-primary" />
+      </div>
+    }>
+      <CEOInvoicesPageInner />
+    </Suspense>
+  );
+}
+
+function CEOInvoicesPageInner() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const [companies, setCompanies] = useState<Company[]>([]);

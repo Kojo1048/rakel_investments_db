@@ -1,8 +1,7 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
-// ... rest of file unchanged
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,6 +43,18 @@ async function uploadAttachment(file: File, title: string, companyId?: string) {
 }
 
 export default function CompanyInvoicesPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-[50vh] flex items-center justify-center">
+        <Spinner className="h-8 w-8 text-primary" />
+      </div>
+    }>
+      <CompanyInvoicesPageInner />
+    </Suspense>
+  );
+}
+
+function CompanyInvoicesPageInner() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
   const { user } = useAuth();
@@ -234,6 +245,7 @@ export default function CompanyInvoicesPage() {
 
   // ── Find & open document viewer for an invoice ───────────────────────────────
   const handleViewInvoice = async (inv: Invoice) => {
+    setViewDoc(null);
     setLoadingView(true);
     try {
       const params = new URLSearchParams({ category: 'Invoices', limit: '10' });
@@ -248,6 +260,28 @@ export default function CompanyInvoicesPage() {
       }
     } catch { /* ignore */ }
     setLoadingView(false);
+  };
+
+  // ── Download the attached invoice document directly ───────────────────────────
+  const handleDownloadInvoice = async (inv: Invoice) => {
+    try {
+      const params = new URLSearchParams({ category: 'Invoices', limit: '10' });
+      if (inv.companyId) params.set('companyId', inv.companyId);
+      const res = await fetch(`/api/v1/documents?${params}`, { credentials: 'include' });
+      if (!res.ok) return;
+      const data = await res.json();
+      const docs: any[] = data.documents ?? [];
+      const doc = docs.find(d => d.title.includes(inv.client) || d.title.includes(inv.invoiceNumber))
+        ?? docs[0] ?? null;
+      if (!doc) return;
+      const dlRes = await fetch(`/api/v1/documents/${doc.id}/download`, { credentials: 'include' });
+      if (!dlRes.ok) return;
+      const blob = await dlRes.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = window.document.createElement('a');
+      a.href = url; a.download = doc.filename; a.click();
+      URL.revokeObjectURL(url);
+    } catch { /* ignore */ }
   };
 
   // ── Computed ────────────────────────────────────────────────────────────────
@@ -624,7 +658,7 @@ export default function CompanyInvoicesPage() {
                             variant="ghost" size="sm"
                             className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
                             title="Download"
-                            onClick={() => handleViewInvoice(inv)}
+                            onClick={() => handleDownloadInvoice(inv)}
                           >
                             <Download className="h-3.5 w-3.5" />
                           </Button>

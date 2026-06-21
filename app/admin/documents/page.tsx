@@ -179,7 +179,7 @@ export default function AdminDocumentsPage() {
                   <Select value={uploadCategory} onValueChange={setUploadCategory}>
                     <SelectTrigger className="bg-input border-border"><SelectValue placeholder="Select category" /></SelectTrigger>
                     <SelectContent className="bg-popover border-border">
-                      {['Contracts Signed', 'Invoice', 'Business Documents', 'Submitted Bidding Documents'].map(c => (
+                      {['Contracts Signed', 'Invoice', 'Business Documents', 'Submitted Bidding Documents', 'Past Experiences'].map(c => (
                         <SelectItem key={c} value={c}>{c}</SelectItem>
                       ))}
                     </SelectContent>

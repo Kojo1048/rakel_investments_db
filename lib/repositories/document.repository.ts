@@ -89,7 +89,7 @@ export async function createDocument(data: {
   const { data: doc, error } = await db
     .from('Document')
     .insert({ id: randomUUID(), ...data })
-    .select(DOCUMENT_COLS)
+    .select('*')
     .single();
   if (error) throw error;
   return doc;

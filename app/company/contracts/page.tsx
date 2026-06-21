@@ -77,10 +77,7 @@ export default function CompanyContractsPage() {
   const [contractDoc,     setContractDoc]     = useState<any | null>(null);
   const [loadingDoc,      setLoadingDoc]      = useState(false);
   const [showPreview,     setShowPreview]     = useState(false);
-  const [blobUrl,         setBlobUrl]         = useState<string | null>(null);
-  const [previewLoading,  setPreviewLoading]  = useState(false);
   const [downloadingDoc,  setDownloadingDoc]  = useState(false);
-  const blobRef = useRef<string | null>(null);
 
   // ── Fetch data ──────────────────────────────────────────────────────────────
   const fetchContracts = () => {
@@ -189,14 +186,13 @@ export default function CompanyContractsPage() {
     } catch { /* ignore */ }
   };
 
-  const openContractView = async (contract: Contract) => {
+  const openContractView = async (contract: Contract): Promise<any | null> => {
     setViewContract(contract);
     setContractDoc(null);
     setShowPreview(false);
-    setBlobUrl(null);
     setLoadingDoc(true);
 
-    // Search for documents uploaded with this contract's company + Contracts category
+    let found: any | null = null;
     try {
       const params = new URLSearchParams({ category: 'Contracts', limit: '20' });
       if (contract.companyId) params.set('companyId', contract.companyId);
@@ -204,36 +200,23 @@ export default function CompanyContractsPage() {
       if (res.ok) {
         const data = await res.json();
         const docs: any[] = data.documents ?? [];
-        // Prefer an exact title match, then fall back to any Contracts document
-        const best = docs.find(d => d.title === contract.title) ?? docs[0] ?? null;
-        setContractDoc(best);
+        found = docs.find(d => d.title === contract.title) ?? docs[0] ?? null;
+        setContractDoc(found);
       }
     } catch { /* silent — doc section will show "not available" */ }
     setLoadingDoc(false);
+    return found;
   };
 
   const closeContractView = () => {
     setViewContract(null);
     setContractDoc(null);
     setShowPreview(false);
-    if (blobRef.current) { URL.revokeObjectURL(blobRef.current); blobRef.current = null; }
-    setBlobUrl(null);
   };
 
-  const handleReadDocument = async () => {
+  const handleReadDocument = () => {
     if (!contractDoc) return;
     setShowPreview(true);
-    setPreviewLoading(true);
-    if (blobRef.current) { URL.revokeObjectURL(blobRef.current); blobRef.current = null; }
-    try {
-      const res = await fetch(`/api/v1/documents/${contractDoc.id}/download`, { credentials: 'include' });
-      if (!res.ok) throw new Error('Failed');
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      blobRef.current = url;
-      setBlobUrl(url);
-    } catch { setBlobUrl(null); }
-    setPreviewLoading(false);
   };
 
   const handleDownloadDoc = async () => {
@@ -520,7 +503,19 @@ export default function CompanyContractsPage() {
                   <Button
                     variant="outline" size="sm"
                     className="flex-1 border-border text-foreground hover:bg-muted"
-                    onClick={async () => { await openContractView(c); handleDownloadDoc(); }}
+                    onClick={async () => {
+                      const doc = await openContractView(c);
+                      if (!doc) return;
+                      try {
+                        const res = await fetch(`/api/v1/documents/${doc.id}/download`, { credentials: 'include' });
+                        if (!res.ok) return;
+                        const blob = await res.blob();
+                        const url  = URL.createObjectURL(blob);
+                        const a    = window.document.createElement('a');
+                        a.href = url; a.download = doc.filename; a.click();
+                        URL.revokeObjectURL(url);
+                      } catch { /* ignore */ }
+                    }}
                   >
                     <Download className="h-3 w-3 mr-1" />Download
                   </Button>
@@ -614,22 +609,17 @@ export default function CompanyContractsPage() {
                 /* ── Preview panel ────────────────────────────────────── */
                 <div className="flex flex-col gap-3" style={{ minHeight: '55vh' }}>
                   <button
-                    onClick={() => { setShowPreview(false); if (blobRef.current) { URL.revokeObjectURL(blobRef.current); blobRef.current = null; } setBlobUrl(null); }}
+                    onClick={() => setShowPreview(false)}
                     className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors self-start"
                   >
                     <ArrowLeft className="h-3.5 w-3.5" />Back to details
                   </button>
                   <div className="flex-1 rounded-lg border border-border overflow-hidden bg-muted/20" style={{ minHeight: '50vh' }}>
-                    {previewLoading ? (
-                      <div className="flex flex-col items-center justify-center gap-3 p-8" style={{ minHeight: '50vh' }}>
-                        <Spinner className="h-7 w-7 text-primary" />
-                        <p className="text-sm text-muted-foreground">Loading preview…</p>
-                      </div>
-                    ) : !blobUrl ? (
+                    {!contractDoc?.storageKey ? (
                       <div className="flex flex-col items-center justify-center gap-3 p-8 text-center" style={{ minHeight: '50vh' }}>
                         <AlertCircle className="h-10 w-10 text-muted-foreground opacity-60" />
-                        <p className="text-foreground font-medium">Preview failed</p>
-                        <p className="text-sm text-muted-foreground">Use the Download button to access this file.</p>
+                        <p className="text-foreground font-medium">No file attached</p>
+                        <p className="text-sm text-muted-foreground">This document has no file. Re-upload to enable preview.</p>
                       </div>
                     ) : ['DOCX', 'DOC', 'XLSX', 'CSV'].includes((contractDoc?.fileType ?? '').toUpperCase()) ? (
                       <div className="flex flex-col items-center justify-center gap-3 p-8 text-center" style={{ minHeight: '50vh' }}>
@@ -638,10 +628,9 @@ export default function CompanyContractsPage() {
                         <p className="text-sm text-muted-foreground">Download the file to open it in its native application.</p>
                       </div>
                     ) : (
-                      /* PDF / image — blob URL bypasses Brave Shields */
                       <iframe
-                        key={blobUrl}
-                        src={blobUrl}
+                        key={contractDoc.storageKey}
+                        src={contractDoc.storageKey}
                         title={contractDoc?.title}
                         className="w-full border-0"
                         style={{ height: '50vh' }}

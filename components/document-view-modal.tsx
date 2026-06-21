@@ -5,7 +5,6 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
 import {
   FileText, Download, BookOpen, Building2, Briefcase,
   User, Calendar, Clock, Tag, ArrowLeft, AlertCircle,
@@ -59,21 +58,19 @@ function MetaRow({
 }
 
 // ── Preview panel ─────────────────────────────────────────────────────────────
-// Fetches through the download API → blob:// URL → Brave cannot block it.
+// Serves files directly from their public /uploads/ path — no fetch needed.
 
 function PreviewPanel({ doc, onBack, onDownload }: {
   doc: Document;
   onBack: () => void;
   onDownload: () => void;
 }) {
-  const [blobUrl,      setBlobUrl]      = useState<string | null>(null);
-  const [loading,      setLoading]      = useState(true);
-  const [error,        setError]        = useState('');
+  const [loadFailed,   setLoadFailed]   = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const revokeRef    = useRef<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Keep fullscreen state in sync with browser ESC / button
+  useEffect(() => { setLoadFailed(false); }, [doc.id, doc.storageKey]);
+
   useEffect(() => {
     const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', onFsChange);
@@ -89,41 +86,9 @@ function PreviewPanel({ doc, onBack, onDownload }: {
     }
   };
 
-  const type        = (doc.fileType ?? '').toUpperCase();
-  const canEmbed    = Boolean(doc.storageKey) && EMBED_TYPES.has(type);
-  const isImageFile = IMAGE_TYPES.has(type);
-
-  useEffect(() => {
-    if (revokeRef.current) { URL.revokeObjectURL(revokeRef.current); revokeRef.current = null; }
-    setBlobUrl(null);
-    setError('');
-
-    if (!doc.storageKey) { setLoading(false); setError('no-file'); return; }
-    if (!canEmbed)        { setLoading(false); return; }
-
-    setLoading(true);
-    const ctrl = new AbortController();
-
-    fetch(`/api/v1/documents/${doc.id}/download`, { credentials: 'include', signal: ctrl.signal })
-      .then(r => { if (!r.ok) throw new Error(`${r.status}`); return r.blob(); })
-      .then(blob => {
-        if (ctrl.signal.aborted) return;
-        const url = URL.createObjectURL(blob);
-        revokeRef.current = url;
-        setBlobUrl(url);
-        setLoading(false);
-      })
-      .catch(err => {
-        if (err.name === 'AbortError') return;
-        setError('Could not load the file for preview. Use the Download button instead.');
-        setLoading(false);
-      });
-
-    return () => ctrl.abort();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc.id, doc.storageKey]);
-
-  useEffect(() => () => { if (revokeRef.current) URL.revokeObjectURL(revokeRef.current); }, []);
+  const type     = (doc.fileType ?? '').toUpperCase();
+  const canEmbed = Boolean(doc.storageKey) && EMBED_TYPES.has(type);
+  const isImage  = IMAGE_TYPES.has(type);
 
   return (
     <div ref={containerRef} className="flex flex-col gap-3" style={{ minHeight: '75vh' }}>
@@ -148,19 +113,12 @@ function PreviewPanel({ doc, onBack, onDownload }: {
         </Button>
       </div>
 
-      {/* Preview area — taller than before */}
+      {/* Preview area */}
       <div
         className="flex-1 rounded-lg border border-border overflow-hidden bg-muted/20"
         style={{ minHeight: '80vh' }}
       >
-        {loading && (
-          <div className="flex flex-col items-center justify-center gap-3 p-8" style={{ minHeight: '80vh' }}>
-            <Spinner className="h-7 w-7 text-primary" />
-            <p className="text-sm text-muted-foreground">Loading preview…</p>
-          </div>
-        )}
-
-        {!loading && error === 'no-file' && (
+        {!doc.storageKey && (
           <div className="flex flex-col items-center justify-center gap-3 p-8 text-center" style={{ minHeight: '80vh' }}>
             <AlertCircle className="h-10 w-10 text-muted-foreground opacity-60" />
             <p className="text-foreground font-medium">No file attached</p>
@@ -170,18 +128,7 @@ function PreviewPanel({ doc, onBack, onDownload }: {
           </div>
         )}
 
-        {!loading && error && error !== 'no-file' && (
-          <div className="flex flex-col items-center justify-center gap-3 p-8 text-center" style={{ minHeight: '80vh' }}>
-            <AlertCircle className="h-10 w-10 text-destructive opacity-70" />
-            <p className="text-foreground font-medium">Preview failed</p>
-            <p className="text-sm text-muted-foreground max-w-sm">{error}</p>
-            <Button variant="outline" size="sm" className="mt-2 border-border" onClick={onDownload}>
-              <Download className="h-3.5 w-3.5 mr-1.5" />Download instead
-            </Button>
-          </div>
-        )}
-
-        {!loading && !error && !canEmbed && (
+        {doc.storageKey && !canEmbed && (
           <div className="flex flex-col items-center justify-center gap-3 p-8 text-center" style={{ minHeight: '80vh' }}>
             <FileText className="h-10 w-10 text-muted-foreground opacity-60" />
             <p className="text-foreground font-medium">{type} files cannot be previewed in the browser</p>
@@ -192,26 +139,38 @@ function PreviewPanel({ doc, onBack, onDownload }: {
           </div>
         )}
 
-        {!loading && !error && canEmbed && blobUrl && isImageFile && (
+        {doc.storageKey && canEmbed && loadFailed && (
+          <div className="flex flex-col items-center justify-center gap-3 p-8 text-center" style={{ minHeight: '80vh' }}>
+            <AlertCircle className="h-10 w-10 text-destructive opacity-70" />
+            <p className="text-foreground font-medium">Preview failed</p>
+            <p className="text-sm text-muted-foreground max-w-sm">Could not load the file for preview. Use the Download button instead.</p>
+            <Button variant="outline" size="sm" className="mt-2 border-border" onClick={onDownload}>
+              <Download className="h-3.5 w-3.5 mr-1.5" />Download instead
+            </Button>
+          </div>
+        )}
+
+        {doc.storageKey && canEmbed && !loadFailed && isImage && (
           <div className="flex items-center justify-center p-4" style={{ minHeight: '80vh' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={blobUrl}
+              src={doc.storageKey}
               alt={doc.title}
               className="max-w-full max-h-full object-contain rounded"
               style={{ maxHeight: '78vh' }}
+              onError={() => setLoadFailed(true)}
             />
           </div>
         )}
 
-        {/* blob:// URL → no sandbox, Brave cannot block it */}
-        {!loading && !error && canEmbed && blobUrl && !isImageFile && (
+        {doc.storageKey && canEmbed && !loadFailed && !isImage && (
           <iframe
-            key={blobUrl}
-            src={blobUrl}
+            key={doc.storageKey}
+            src={doc.storageKey}
             title={doc.title}
             className="w-full border-0"
             style={{ height: '80vh' }}
+            onError={() => setLoadFailed(true)}
           />
         )}
       </div>

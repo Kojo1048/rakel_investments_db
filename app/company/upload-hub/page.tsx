@@ -54,7 +54,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 const ACTIVITY_TYPES = ['Excavation','Concreting','Welding','Installation','Inspection','Maintenance','Survey','Delivery','Assembly','Testing','Other'];
 const DEPARTMENTS    = ['Engineering','Construction','Logistics','Maintenance','Quality Control','Health & Safety','Administration','Procurement','Site Operations','Other'];
-const DOC_CATEGORIES = ['Contracts Signed','Invoice','Business Documents','Submitted Bidding Documents'];
+const DOC_CATEGORIES = ['Contracts Signed','Invoice','Business Documents','Submitted Bidding Documents','Past Experiences'];
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
