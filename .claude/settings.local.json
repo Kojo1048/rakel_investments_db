@@ -1,7 +1,22 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(Test-Path 'c:\\\\Projects\\\\Rakel-investment-db\\\\app\\\\providers.tsx')",
+      "Bash(Test-Path 'c:\\\\Projects\\\\Rakel-investment-db\\\\components\\\\invoice-view-modal.tsx')",
+      "Bash(Test-Path 'c:\\\\Projects\\\\Rakel-investment-db\\\\components\\\\invoice-form-modal.tsx')",
+      "Bash(echo \"EXIT_CODE:$?\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(node -e ' *)",
+      "Bash(grep -v \"//\\\\|useState\\\\|useMemo\\\\|useEffect\\\\|useRef\\\\|useCallback\\\\|useLayoutEffect\\\\|useDebugValue\\\\|useId\\\\|useImperativeHandle\\\\|useInsertionEffect\\\\|useReducer\\\\|useSyncExternal\\\\|useTransition\\\\|useDeferredValue\")",
+      "Bash(# Check which files have 'use client' \\(client components\\) *)"
+    ],
+    "additionalDirectories": [
+      "\\tmp"
     ]
   }
 }

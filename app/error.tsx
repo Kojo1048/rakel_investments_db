@@ -1,5 +1,4 @@
 'use client';
-export const dynamic = 'force-dynamic';
 
 import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
