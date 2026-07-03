@@ -4,8 +4,7 @@ import { DocumentQuerySchema, CreateDocumentSchema } from '@/lib/validations/doc
 import { findDocuments, createDocument } from '@/lib/repositories/document.repository';
 import { createAuditLog } from '@/lib/repositories/audit.repository';
 import { requireCompanyAccess } from '@/lib/auth/permissions';
-import { writeFile, mkdir, unlink } from 'fs/promises';
-import { join } from 'path';
+import { db} from '@/lib/db';
 import { randomUUID } from 'crypto';
 
 // Must run in Node.js runtime — uses fs and crypto
@@ -56,7 +55,7 @@ const ALLOWED_EXT = ['PDF', 'DOC', 'DOCX', 'XLSX', 'CSV'] as const;
 const MAX_BYTES   = 50 * 1024 * 1024;
 
 export async function POST(req: NextRequest) {
-  let savedFilePath: string | null = null;
+  
 
   try {
     const session = withPermission(getSessionFromRequest(req), 'documents:upload');
@@ -95,20 +94,34 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 3. Save file to /public/uploads/ ─────────────────────────────────────
-    const uploadDir = join(process.cwd(), 'public', 'uploads');
-    await mkdir(uploadDir, { recursive: true });
-
-    // UUID + sanitised original name prevents collisions and path traversal
     const safeOriginal = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const uniqueName   = `${randomUUID()}-${safeOriginal}`;
-    savedFilePath      = join(uploadDir, uniqueName);
+    const uniqueName = `${randomUUID()}-${safeOriginal}`;
 
     const bytes = await file.arrayBuffer();
-    await writeFile(savedFilePath, Buffer.from(bytes));
+    const buffer = Buffer.from(bytes);
 
-    const storageKey = `/uploads/${uniqueName}`;
-    console.log('[documents] POST file saved to disk →', savedFilePath);
-    console.log('[documents] POST storageKey to be stored in DB:', storageKey);
+    const storageKey = `documents/${uniqueName}`;
+
+    const { error: uploadError} = await db.storage
+    .from('uploads')
+    .upload(storageKey, buffer, {
+      contentType: file.type,
+      upsert: false,
+    });
+
+    if (uploadError) {
+      console.error('[documents] Supabase upload failed', uploadError);
+      return NextResponse.json(
+        { error: 'Failed to upload file to storage'},
+        { status: 500}
+      );
+    }
+
+    console.log('[documents] Uploaded to supabase Storage:', storageKey);
+
+
+
+
 
     // ── 4. Validate metadata ─────────────────────────────────────────────────
     const toStr = (key: string): string | undefined => {
@@ -141,8 +154,6 @@ export async function POST(req: NextRequest) {
     const parsed = CreateDocumentSchema.safeParse(rawBody);
     if (!parsed.success) {
       console.warn('[documents] POST validation failed:', parsed.error.flatten());
-      await unlink(savedFilePath).catch(() => {});
-      savedFilePath = null;
       return NextResponse.json(
         { error: 'Validation failed', issues: parsed.error.flatten().fieldErrors },
         { status: 400 }
@@ -159,8 +170,7 @@ export async function POST(req: NextRequest) {
       if (cat === 'Invoices') {
         // Invoice files must contain the word "invoice" (case-insensitive)
         if (!file.name.toLowerCase().includes('invoice')) {
-          await unlink(savedFilePath).catch(() => {});
-          savedFilePath = null;
+          
           return NextResponse.json(
             { error: 'Invoice file name must contain the word "invoice" (e.g. invoice_2026_001.pdf).' },
             { status: 400 }
@@ -169,8 +179,8 @@ export async function POST(req: NextRequest) {
       } else if (cat !== 'Operations' && title) {
         // Contracts and all Document categories: file name (without extension) must match the title
         if (norm(baseName) !== norm(title)) {
-          await unlink(savedFilePath).catch(() => {});
-          savedFilePath = null;
+          
+
           const entityLabel = cat === 'Contracts' ? 'Contract Title' : 'Document Title';
           return NextResponse.json(
             { error: `File name must match the ${entityLabel}. Expected: "${title}"` },
@@ -214,7 +224,7 @@ export async function POST(req: NextRequest) {
       console.error('[documents] POST WARNING: storageKey was NOT saved to DB. Check Prisma select includes storageKey.');
     }
 
-    savedFilePath = null; // success — do not delete
+    
 
     await createAuditLog({
       userId:       session.userId,
@@ -227,9 +237,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ document }, { status: 201 });
   } catch (err) {
-    if (savedFilePath) {
-      await unlink(savedFilePath).catch(() => {});
-    }
+
     console.error('[documents] POST error:', err);
     return handleAuthError(err);
   }

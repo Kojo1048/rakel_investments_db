@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest, withAuth } from '@/lib/auth/middleware';
 import { db } from '@/lib/db';
-import { readFile, access } from 'fs/promises';
-import { join } from 'path';
-import { constants } from 'fs';
+
 
 export const runtime = 'nodejs';
 
@@ -31,11 +29,20 @@ export async function GET(
     console.log('[download] request for document id:', id);
 
     // ── 1. Fetch record from DB ───────────────────────────────────────────────
-    const { data: doc } = await db
+    const { data, error: dbError } = await db
       .from('Document')
       .select('id, filename, storageKey, fileType')
       .eq('id', id)
       .maybeSingle();
+
+      if (dbError) throw dbError;
+
+      const doc = data as {
+        id: string;
+        filename: string;
+        storageKey: string | null;
+        fileType: string;
+      } | null;
 
     if (!doc) {
       console.warn('[download] document not found in DB:', id);
@@ -53,25 +60,21 @@ export async function GET(
 
     // ── 2. Resolve file path ─────────────────────────────────────────────────
     // storageKey is "/uploads/filename.ext" — resolve to public/ directory
-    const relPath = doc.storageKey.replace(/^\/+/, '');          // strip leading /
-    const absPath = join(process.cwd(), 'public', relPath);
+    console.log('[download] downloading from supabase:', doc.storageKey);
 
-    console.log('[download] resolving to absolute path:', absPath);
+    const {data: fileData, error: storageError} = await db.storage
+    .from('uploads')
+    .download(doc.storageKey);
 
-    // ── 3. Verify file exists ────────────────────────────────────────────────
-    try {
-      await access(absPath, constants.R_OK);
-      console.log('[download] file exists ✓');
-    } catch {
-      console.error('[download] file NOT found on disk at:', absPath);
+    if (storageError || !fileData){
+      console.error('[download] Supabase downlaod failed:', storageError);
       return NextResponse.json(
-        { error: 'File not found on server. It may have been deleted or moved.' },
-        { status: 404 }
+        {error: 'File not found in storage.'},
+        {status: 404}
       );
     }
 
-    // ── 4. Read and stream ───────────────────────────────────────────────────
-    const buffer = await readFile(absPath);
+    const buffer =Buffer.from(await fileData.arrayBuffer())
 
     const ext  = (doc.storageKey.split('.').pop() ?? '').toUpperCase();
     const mime = MIME[ext] ?? 'application/octet-stream';
@@ -85,7 +88,7 @@ export async function GET(
       status: 200,
       headers: {
         'Content-Type':        mime,
-        'Content-Disposition': `attachment; filename="${safeFilename}"`,
+        'Content-Disposition': `inline; filename="${safeFilename}"`,
         'Content-Length':      String(buffer.length),
         'Cache-Control':       'no-store',
       },

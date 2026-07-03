@@ -248,6 +248,7 @@ export default function CompanyContractsPage() {
     contracts.forEach(c => { counts[c.status] = (counts[c.status] ?? 0) + 1; });
     return counts;
   }, [contracts]);
+  const contractPreviewUrl = contractDoc ? `/api/v1/documents/${contractDoc.id}/download` : '';
 
   if (!mounted) return null;
 
@@ -628,8 +629,8 @@ export default function CompanyContractsPage() {
                       </div>
                     ) : (
                       <iframe
-                        key={contractDoc.storageKey}
-                        src={contractDoc.storageKey}
+                        key={contractDoc.id}
+                        src={contractPreviewUrl}
                         title={contractDoc?.title}
                         className="w-full border-0"
                         style={{ height: '50vh' }}

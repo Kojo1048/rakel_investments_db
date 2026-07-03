@@ -69,6 +69,8 @@ function PreviewPanel({ doc, onBack, onDownload }: {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const previewUrl = `/api/v1/documents/${doc.id}/download`;
+
   useEffect(() => { setLoadFailed(false); }, [doc.id, doc.storageKey]);
 
   useEffect(() => {
@@ -154,7 +156,7 @@ function PreviewPanel({ doc, onBack, onDownload }: {
           <div className="flex items-center justify-center p-4" style={{ minHeight: '80vh' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={doc.storageKey}
+              src={previewUrl}
               alt={doc.title}
               className="max-w-full max-h-full object-contain rounded"
               style={{ maxHeight: '78vh' }}
@@ -165,8 +167,8 @@ function PreviewPanel({ doc, onBack, onDownload }: {
 
         {doc.storageKey && canEmbed && !loadFailed && !isImage && (
           <iframe
-            key={doc.storageKey}
-            src={doc.storageKey}
+            key={doc.id}
+            src={previewUrl}
             title={doc.title}
             className="w-full border-0"
             style={{ height: '80vh' }}

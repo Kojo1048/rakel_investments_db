@@ -13,7 +13,11 @@
       "Bash(git commit -m ' *)",
       "Bash(node -e ' *)",
       "Bash(grep -v \"//\\\\|useState\\\\|useMemo\\\\|useEffect\\\\|useRef\\\\|useCallback\\\\|useLayoutEffect\\\\|useDebugValue\\\\|useId\\\\|useImperativeHandle\\\\|useInsertionEffect\\\\|useReducer\\\\|useSyncExternal\\\\|useTransition\\\\|useDeferredValue\")",
-      "Bash(# Check which files have 'use client' \\(client components\\) *)"
+      "Bash(# Check which files have 'use client' \\(client components\\) *)",
+      "Bash(git -C c:/Projects/Rakel-investment-db show e8819ab:app/ceo/layout.tsx)",
+      "Bash(git -C c:/Projects/Rakel-investment-db show HEAD~1:app/ceo/layout.tsx)",
+      "Bash(git -C c:/Projects/Rakel-investment-db show cbf5d41:app/ceo/layout.tsx)",
+      "Bash(git -C c:/Projects/Rakel-investment-db log --oneline -5)"
     ],
     "additionalDirectories": [
       "\\tmp"
