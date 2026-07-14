@@ -103,9 +103,9 @@ function OperationsPageInner() {
   const fetchData = () => {
     setLoading(true);
     Promise.all([
-      safeGet(`/api/v1/operations?days=${timeRange}`, { records: [] }),
-      safeGet('/api/v1/contracts',  { contracts: [] }),
-      safeGet('/api/v1/companies',  { companies: [] }),
+      safeGet(`/api/v1/operations?days=${timeRange}`, { records: [] }, 8000, 1),
+      safeGet('/api/v1/contracts',  { contracts: [] }, 8000, 1),
+      safeGet('/api/v1/companies',  { companies: [] }, 8000, 1),
     ]).then(([od, cd, cod]) => {
       setRecords((od as any).records   ?? []);
       setContracts((cd as any).contracts ?? []);
@@ -115,7 +115,6 @@ function OperationsPageInner() {
 
   useEffect(() => { fetchData(); }, [user?.companyId, timeRange]);
 
-  if (!mounted) return null;
   const handleSubmit = async () => {
     if (!form.department || !form.manpowerCount || !form.activityType || !form.performanceScore) return;
     setSubmitting(true);
@@ -240,6 +239,8 @@ function OperationsPageInner() {
 
   const canWrite            = user?.role === 'COMPANY_ADMIN' || user?.role === 'STAFF' || user?.role === 'RAKEL_ADMIN';
   const showCompanySelector = canSelectAnyCompany(user);
+
+  if (!mounted) return null;
 
   return (
     <div className="space-y-6">
@@ -622,7 +623,7 @@ function OperationsPageInner() {
                             {r.performanceScore}%
                           </span>
                         </td>
-                        <td className="p-3 text-muted-foreground">{r.recorder?.username ?? r.recordedBy}</td>
+                        <td className="p-3 text-muted-foreground">{r.recorder?.fullName ?? r.recorder?.username ?? r.recordedBy}</td>
                       </tr>
                     ))}
                   </tbody>

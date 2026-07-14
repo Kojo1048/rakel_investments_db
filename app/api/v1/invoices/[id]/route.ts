@@ -3,14 +3,16 @@ import { getSessionFromRequest, withPermission, handleAuthError } from '@/lib/au
 import { InvoiceUpdateSchema } from '@/lib/validations/invoices.schema';
 import { updateInvoice } from '@/lib/services/invoices.service';
 import { findInvoiceById } from '@/lib/repositories/invoices.repository';
+import { requireCompanyAccess } from '@/lib/auth/permissions';
 import { db } from '@/lib/db';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    withPermission(getSessionFromRequest(req), 'invoices:read');
+    const session = withPermission(getSessionFromRequest(req), 'invoices:read');
     const { id } = await params;
     const invoice = await findInvoiceById(id);
     if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    requireCompanyAccess(session, invoice.companyId);
     return NextResponse.json({ invoice });
   } catch (err) {
     return handleAuthError(err);
@@ -39,6 +41,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { id } = await params;
     const invoice = await findInvoiceById(id);
     if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    requireCompanyAccess(session, invoice.companyId);
 
     // Soft-delete: archive so the record stays in the audit trail
     const { error: archiveError } = await db

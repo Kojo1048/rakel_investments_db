@@ -14,6 +14,7 @@ import {
   BarChart, Bar, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
+import { DocumentViewModal } from '@/components/document-view-modal';
 import type { Company, Invoice, InvoiceStatus } from '@/lib/types';
 import { CHART_TOOLTIP_STYLE } from '@/lib/chart-config';
 import { safeGet } from '@/lib/utils/safe-fetch';
@@ -63,6 +64,9 @@ export default function RakelInvoicesDetailPage() {
   const [editSaving,       setEditSaving]       = useState(false);
   const [deletingId,       setDeletingId]       = useState<string | null>(null);
 
+  // Document preview (shared preview modal, same as every other View flow)
+  const [viewDoc, setViewDoc] = useState<any | null>(null);
+
   // Fetch attached document when View Invoice modal opens
   useEffect(() => {
     if (!viewInvoice) { setInvoiceDoc(null); return; }
@@ -82,10 +86,6 @@ export default function RakelInvoicesDetailPage() {
       .catch(() => setInvoiceDoc(null))
       .finally(() => setInvoiceDocLoading(false));
   }, [viewInvoice]);
-
-  const handleViewDoc = (doc: any) => {
-    if (doc.storageKey) window.open(doc.storageKey, '_blank');
-  };
 
   const handleDownloadDoc = async (doc: any) => {
     setDocDownloading(true);
@@ -433,7 +433,7 @@ export default function RakelInvoicesDetailPage() {
             </p>
             {invoiceDocLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Spinner className="h-3.5 w-3.5 animate-spin" />Looking for attachment…
+                <Spinner className="h-3.5 w-3.5" />Looking for attachment…
               </div>
             ) : invoiceDoc ? (
               <div className="space-y-2">
@@ -444,7 +444,7 @@ export default function RakelInvoicesDetailPage() {
                 </div>
                 <div className="flex gap-2">
                   <Button size="sm" variant="outline" className="flex-1 border-border gap-1.5 text-xs"
-                    onClick={() => handleViewDoc(invoiceDoc)}>
+                    onClick={() => setViewDoc(invoiceDoc)}>
                     <Eye className="h-3.5 w-3.5" />View Document
                   </Button>
                   <Button size="sm" variant="outline" className="flex-1 border-border gap-1.5 text-xs"
@@ -460,6 +460,9 @@ export default function RakelInvoicesDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Document preview modal (shared app-wide component) ─────────────── */}
+      <DocumentViewModal doc={viewDoc} open={viewDoc !== null} onClose={() => setViewDoc(null)} />
 
       {/* ── Edit Status dialog ───────────────────────────────────────────── */}
       <Dialog open={!!editInvoice} onOpenChange={open => { if (!open) setEditInvoice(null); }}>

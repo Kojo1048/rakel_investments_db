@@ -35,7 +35,7 @@ function fmtDateTime(val: Date | string) {
   };
 }
 
-export default function CompanyDocumentsDetailPage() {
+export default function CEOCompanyDocumentsDetailPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
   const { companyId } = useParams<{ companyId: string }>();
@@ -65,7 +65,6 @@ export default function CompanyDocumentsDetailPage() {
   }, [companyId]);
 
   useEffect(() => {
-    console.log('[company-documents] fetching for companyId:', companyId, 'page:', page);
     setLoading(true);
     const params = new URLSearchParams({
       companyId,
@@ -75,7 +74,6 @@ export default function CompanyDocumentsDetailPage() {
     fetch(`/api/v1/documents?${params}`, { credentials: 'include' })
       .then(r => r.ok ? r.json() : { documents: [], total: 0 })
       .then(data => {
-        console.log('[company-documents] received', data.total ?? 0, 'docs for company', companyId);
         setDocuments(data.documents ?? []);
         setTotal(data.total ?? 0);
       })
@@ -146,7 +144,7 @@ export default function CompanyDocumentsDetailPage() {
           variant="outline"
           size="sm"
           className="border-border text-foreground hover:bg-muted mt-1 flex-shrink-0"
-          onClick={() => router.push('/admin/company-documents')}
+          onClick={() => router.push('/ceo/documents')}
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
           All Companies

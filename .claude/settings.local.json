@@ -17,7 +17,14 @@
       "Bash(git -C c:/Projects/Rakel-investment-db show e8819ab:app/ceo/layout.tsx)",
       "Bash(git -C c:/Projects/Rakel-investment-db show HEAD~1:app/ceo/layout.tsx)",
       "Bash(git -C c:/Projects/Rakel-investment-db show cbf5d41:app/ceo/layout.tsx)",
-      "Bash(git -C c:/Projects/Rakel-investment-db log --oneline -5)"
+      "Bash(git -C c:/Projects/Rakel-investment-db log --oneline -5)",
+      "Bash(find . -path ./node_modules -prune -o -name \"*.prisma\" -print)",
+      "Bash(find . -path ./node_modules -prune -o -type d -name \"app\" -print)",
+      "Skill(dataviz)",
+      "Skill(dataviz:*)",
+      "Bash(git checkout *)",
+      "Bash(npx tsc *)",
+      "Read(//tmp/**)"
     ],
     "additionalDirectories": [
       "\\tmp"

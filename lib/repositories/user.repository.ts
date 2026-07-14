@@ -46,7 +46,7 @@ export async function findUserById(id: string) {
 export async function findUserByUsername(username: string) {
   const { data, error } = await db
     .from('User')
-    .select('id, username, passwordHash, role, status, companyId')
+    .select('id, username, passwordHash, role, status, companyId, fullName, email, staffModules, company:Company!User_companyId_fkey(name)')
     .eq('username', username)
     .maybeSingle();
   if (error) throw error;

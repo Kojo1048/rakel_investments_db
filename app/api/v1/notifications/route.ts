@@ -25,7 +25,7 @@ export const NOTIFICATION_ACTIONS = [
 
 export type NotificationAction = (typeof NOTIFICATION_ACTIONS)[number];
 
-const ALLOWED_ROLES = ['SUPER_ADMIN', 'RAKEL_ADMIN'] as const;
+const ALLOWED_ROLES = ['SUPER_ADMIN', 'RAKEL_ADMIN', 'COMPANY_ADMIN'] as const;
 
 const NOTIFICATION_COLS = `
   id, username, action, details,
@@ -50,6 +50,11 @@ export async function GET(req: NextRequest) {
       .select(NOTIFICATION_COLS)
       .in('action', [...NOTIFICATION_ACTIONS])
       .order('createdAt', { ascending: false });
+
+    // Company Admins only ever see their own company's events
+    if (session.role === 'COMPANY_ADMIN') {
+      query = query.eq('companyId', session.companyId ?? '');
+    }
 
     if (since) query = query.gt('createdAt', since);
     if (!unread) query = query.limit(limit);

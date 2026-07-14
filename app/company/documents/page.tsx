@@ -18,6 +18,7 @@ import { DocumentViewModal } from '@/components/document-view-modal';
 import type { Document, ReminderInterval, Company } from '@/lib/types';
 import { REMINDER_INTERVAL_LABELS } from '@/lib/types';
 import { canSelectAnyCompany } from '@/lib/utils/rakel-staff';
+import { safeGet } from '@/lib/utils/safe-fetch';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -58,7 +59,7 @@ export default function CompanyDocumentsPage() {
     }
   };
 
-  const canDelete = user?.role === 'SUPER_ADMIN' || user?.role === 'RAKEL_ADMIN';
+  const canDelete = user?.role === 'SUPER_ADMIN' || user?.role === 'RAKEL_ADMIN' || user?.role === 'COMPANY_ADMIN';
 
   // ── upload dialog state ──────────────────────────────────────────────────
   const [dialogOpen,    setDialogOpen]    = useState(false);
@@ -82,13 +83,12 @@ export default function CompanyDocumentsPage() {
   // ── data fetching ────────────────────────────────────────────────────────
 
   const loadDocuments = () => {
-    const ctrl  = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 8000);
-    fetch('/api/v1/documents', { credentials: 'include', signal: ctrl.signal })
-      .then(r => r.ok ? r.json() : { documents: [] })
+    setLoading(true);
+    // retries=1 guards against transient slow responses (e.g. cold starts) that
+    // would otherwise silently leave the page empty until a manual refresh.
+    safeGet('/api/v1/documents', { documents: [] }, 8000, 1)
       .then(d => setDocuments(d.documents ?? []))
-      .catch(() => setDocuments([]))
-      .finally(() => { clearTimeout(timer); setLoading(false); });
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => {
@@ -103,7 +103,6 @@ export default function CompanyDocumentsPage() {
     }
   }, [user?.companyId, showCompanySelector]);
 
-  if (!mounted) return null;
   // ── dialog helpers ───────────────────────────────────────────────────────
 
   const resetDialog = () => {
@@ -188,6 +187,8 @@ export default function CompanyDocumentsPage() {
     }
     return matchSearch && matchCat && matchDate;
   }), [documents, searchTerm, categoryFilter, dateFilter]);
+
+  if (!mounted) return null;
 
   // ── render ───────────────────────────────────────────────────────────────
 
@@ -488,7 +489,7 @@ export default function CompanyDocumentsPage() {
                 )}
                 <div className="mt-4 pt-3 border-t border-border">
                   <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
-                    <span>By {doc.uploader?.username ?? doc.uploadedBy}</span>
+                    <span>By {doc.uploader?.fullName ?? doc.uploader?.username ?? doc.uploadedBy}</span>
                     <span>{doc.fileSize ? `${(doc.fileSize / 1_000_000).toFixed(1)} MB` : ''}</span>
                   </div>
                   <div className="flex gap-2">

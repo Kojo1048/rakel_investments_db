@@ -1,147 +1,121 @@
 'use client';
 
-
-import { useState, useEffect, useMemo } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { useEffect, useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import { FileText, Search, Download, Eye, Filter, FolderOpen } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DocumentViewModal } from '@/components/document-view-modal';
-import type { Document, Company } from '@/lib/types';
+import { Building2, FolderOpen, ChevronRight } from 'lucide-react';
+import type { Company, Document } from '@/lib/types';
 import { safeGet } from '@/lib/utils/safe-fetch';
 
-export default function CEODocumentsPage() {
-  const [documents,  setDocuments]  = useState<Document[]>([]);
-  const [companies,  setCompanies]  = useState<Company[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [searchTerm,     setSearchTerm]     = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [companyFilter,  setCompanyFilter]  = useState('all');
+interface CompanyDocumentRow {
+  company:        Company;
+  total:          number;
+  bidding:        number;
+  contracts:      number;
+  invoices:       number;
+  pastExperience: number;
+}
 
-  // Shared document viewer — same modal used in Rakel Admin and Company dashboards
-  const [viewDoc, setViewDoc] = useState<Document | null>(null);
+export default function CEODocumentsPage() {
+  const router = useRouter();
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [loading,   setLoading]   = useState(true);
 
   useEffect(() => {
     Promise.all([
-      safeGet('/api/v1/documents', { documents: [] }),
-      safeGet('/api/v1/companies', { companies: [] }),
-    ]).then(([dd, cd]) => {
-      setDocuments((dd as any).documents ?? []);
+      safeGet('/api/v1/companies', { companies: [] }, 8000, 1),
+      safeGet('/api/v1/documents', { documents: [] }, 8000, 1),
+    ]).then(([cd, dd]) => {
       setCompanies((cd as any).companies ?? []);
+      setDocuments((dd as any).documents ?? []);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
-  const categories = useMemo(() => [...new Set(documents.map(d => d.category))], [documents]);
+  const rows = useMemo((): CompanyDocumentRow[] =>
+    companies.map(company => {
+      const docs = documents.filter(d => d.companyId === company.id);
+      return {
+        company,
+        total:          docs.length,
+        bidding:        docs.filter(d => d.category === 'Submitted Bidding Documents').length,
+        contracts:      docs.filter(d => d.category === 'Contracts Signed' || d.category === 'Contracts').length,
+        invoices:       docs.filter(d => d.category === 'Invoice' || d.category === 'Invoices').length,
+        pastExperience: docs.filter(d => d.category === 'Past Experiences').length,
+      };
+    }), [companies, documents]);
 
-  const filtered = useMemo(() => documents.filter(doc => {
-    const matchSearch = doc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doc.filename.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchCat = categoryFilter === 'all' || doc.category === categoryFilter;
-    const matchCo  = companyFilter  === 'all' || doc.companyId === companyFilter;
-    return matchSearch && matchCat && matchCo;
-  }), [documents, searchTerm, categoryFilter, companyFilter]);
-
-  const handleDownload = async (doc: Document) => {
-    if (!doc.storageKey) return;
-    try {
-      const res = await fetch(`/api/v1/documents/${doc.id}/download`, { credentials: 'include' });
-      if (!res.ok) return;
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = window.document.createElement('a');
-      a.href = url; a.download = doc.filename; a.click();
-      URL.revokeObjectURL(url);
-    } catch { /* silent */ }
-  };
+  if (loading) {
+    return <div className="min-h-[50vh] flex items-center justify-center"><Spinner className="h-8 w-8 text-primary" /></div>;
+  }
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Documents &amp; Reports</h1>
-        <p className="text-muted-foreground">View all company documents and reports.</p>
+        <h1 className="text-2xl font-bold text-foreground">Documents</h1>
+        <p className="text-muted-foreground">Select a company to view and manage its documents.</p>
       </div>
 
-      <Card className="bg-card border-border">
-        <CardContent className="p-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <div className="relative flex-1 max-w-xs">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="Search documents..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-10 bg-input border-border" />
-            </div>
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-[180px] bg-input border-border"><SelectValue placeholder="Category" /></SelectTrigger>
-              <SelectContent className="bg-popover border-border">
-                <SelectItem value="all">All Categories</SelectItem>
-                {categories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={companyFilter} onValueChange={setCompanyFilter}>
-              <SelectTrigger className="w-[200px] bg-input border-border"><SelectValue placeholder="Company" /></SelectTrigger>
-              <SelectContent className="bg-popover border-border">
-                <SelectItem value="all">All Companies</SelectItem>
-                {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {loading ? (
-        <div className="flex justify-center py-16"><Spinner className="h-8 w-8 text-primary" /></div>
-      ) : filtered.length === 0 ? (
+      {rows.length === 0 ? (
         <Card className="bg-card border-border">
-          <CardContent className="p-12 text-center">
-            <FolderOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium text-foreground">No Documents Found</h3>
-            <p className="text-muted-foreground">
-              {documents.length === 0 ? 'No documents have been uploaded yet.' : 'Try adjusting your search or filters.'}
-            </p>
+          <CardContent className="p-16 text-center">
+            <FolderOpen className="h-14 w-14 mx-auto text-muted-foreground mb-4 opacity-40" />
+            <h3 className="text-lg font-medium text-foreground">No Companies Found</h3>
+            <p className="text-muted-foreground">Companies will appear here once added to the system.</p>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map(doc => (
-            <Card key={doc.id} className="bg-card border-border hover:border-primary/50 transition-colors">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className={`h-12 w-12 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    doc.fileType?.toLowerCase() === 'pdf' ? 'bg-chart-4/10 text-chart-4' : 'bg-chart-2/10 text-chart-2'
-                  }`}>
-                    <FileText className="h-6 w-6" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-medium text-foreground truncate">{doc.title}</h3>
-                    <p className="text-xs text-muted-foreground mt-1">{doc.filename}</p>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      <span className="text-xs px-2 py-0.5 rounded bg-secondary text-secondary-foreground">{doc.category}</span>
-                      <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary uppercase">{doc.fileType}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4 pt-3 border-t border-border">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
-                    <span>{doc.company?.name ?? 'All Companies'}</span>
-                    <span>{doc.fileSize ? `${(doc.fileSize / 1_000_000).toFixed(1)} MB` : ''}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="flex-1 border-border text-foreground hover:bg-muted" onClick={() => setViewDoc(doc)}>
-                      <Eye className="h-3 w-3 mr-1" />View
-                    </Button>
-                    <Button variant="outline" size="sm" className="flex-1 border-border text-foreground hover:bg-muted" onClick={() => handleDownload(doc)}>
-                      <Download className="h-3 w-3 mr-1" />Download
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <Card className="bg-card border-border">
+          <CardHeader>
+            <CardTitle className="text-foreground flex items-center gap-2">
+              <FolderOpen className="h-5 w-5 text-primary" />All Companies
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b border-border">
+                  <tr>
+                    {['Company', 'Total Documents', 'Submitted Bidding Documents', 'Signed Contracts', 'Invoices', 'Past Experiences', ''].map(h => (
+                      <th key={h} className="text-left px-4 py-3 text-muted-foreground font-medium whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map(({ company, total, bidding, contracts, invoices, pastExperience }) => (
+                    <tr key={company.id}
+                      className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer"
+                      onClick={() => router.push(`/ceo/documents/${company.id}`)}>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                            style={{ backgroundColor: `${company.colorPrimary ?? '#3b82f6'}20` }}>
+                            <Building2 className="h-4 w-4" style={{ color: company.colorPrimary ?? '#3b82f6' }} />
+                          </div>
+                          <span className="font-medium text-foreground">{company.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-foreground font-semibold">{total}</td>
+                      <td className="px-4 py-3"><span className={`font-semibold ${bidding > 0 ? 'text-primary' : 'text-muted-foreground'}`}>{bidding}</span></td>
+                      <td className="px-4 py-3"><span className={`font-semibold ${contracts > 0 ? 'text-primary' : 'text-muted-foreground'}`}>{contracts}</span></td>
+                      <td className="px-4 py-3"><span className={`font-semibold ${invoices > 0 ? 'text-primary' : 'text-muted-foreground'}`}>{invoices}</span></td>
+                      <td className="px-4 py-3"><span className={`font-semibold ${pastExperience > 0 ? 'text-primary' : 'text-muted-foreground'}`}>{pastExperience}</span></td>
+                      <td className="px-4 py-3">
+                        <Button size="sm" variant="outline" className="border-border hover:border-primary/50 gap-1"
+                          onClick={e => { e.stopPropagation(); router.push(`/ceo/documents/${company.id}`); }}>
+                          View <ChevronRight className="h-3.5 w-3.5" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       )}
-
-      <DocumentViewModal doc={viewDoc} open={viewDoc !== null} onClose={() => setViewDoc(null)} />
     </div>
   );
 }

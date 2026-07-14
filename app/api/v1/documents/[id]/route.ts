@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest, withPermission, handleAuthError } from '@/lib/auth/middleware';
+import { requireCompanyAccess } from '@/lib/auth/permissions';
 import { db } from '@/lib/db';
 import { unlink } from 'fs/promises';
 import { join } from 'path';
@@ -12,7 +13,7 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function GET(req: NextRequest, { params }: Params) {
   try {
-    withPermission(getSessionFromRequest(req), 'documents:read');
+    const session = withPermission(getSessionFromRequest(req), 'documents:read');
     const { id } = await params;
     const { data: doc } = await db
       .from('Document')
@@ -20,6 +21,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       .eq('id', id)
       .maybeSingle();
     if (!doc) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (doc.companyId) requireCompanyAccess(session, doc.companyId as string);
     return NextResponse.json({ document: doc });
   } catch (err) {
     return handleAuthError(err);
@@ -36,10 +38,11 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
     const { data: doc } = await db
       .from('Document')
-      .select('id, filename, storageKey, title')
+      .select('id, filename, storageKey, title, companyId')
       .eq('id', id)
       .maybeSingle();
     if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+    if (doc.companyId) requireCompanyAccess(session, doc.companyId as string);
 
     // 1. Remove the physical file (best-effort — don't fail if already missing)
     if (doc.storageKey) {

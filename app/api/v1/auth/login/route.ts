@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     const ipAddress = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? undefined;
     const userAgent = req.headers.get('user-agent') ?? undefined;
 
-    const { token, user } = await login(username, password, ipAddress, userAgent);
+    const { token, user, fullName, companyName, email, staffModules } = await login(username, password, ipAddress, userAgent);
 
     const isProduction = process.env.NODE_ENV === 'production';
     const response = NextResponse.json({
@@ -28,8 +28,10 @@ export async function POST(req: NextRequest) {
         role: user.role,
         status: user.status,
         companyId: user.companyId ?? null,
-        fullName: null,
-        email: null,
+        companyName,
+        fullName,
+        email,
+        staffModules,
       },
     });
 

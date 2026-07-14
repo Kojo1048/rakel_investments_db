@@ -3,6 +3,7 @@ import { getSessionFromRequest, withPermission, handleAuthError } from '@/lib/au
 import { ContractUpdateSchema } from '@/lib/validations/contracts.schema';
 import { updateContract } from '@/lib/services/contracts.service';
 import { findContractById } from '@/lib/repositories/contracts.repository';
+import { requireCompanyAccess } from '@/lib/auth/permissions';
 import { db } from '@/lib/db';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -11,6 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const contract = await findContractById(id);
     if (!contract) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    requireCompanyAccess(session, contract.companyId);
     return NextResponse.json({ contract });
   } catch (err) {
     return handleAuthError(err);
@@ -39,6 +41,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { id } = await params;
     const contract = await findContractById(id);
     if (!contract) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    requireCompanyAccess(session, contract.companyId);
 
     // Soft-delete: archive instead of hard delete to preserve audit trail
     const { error: archiveError } = await db

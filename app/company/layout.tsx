@@ -102,10 +102,10 @@ export default function CompanyLayout({ children }: { children: React.ReactNode 
     <div className="min-h-screen bg-background">
       <DashboardSidebar services={services} />
       <div className="pl-64 flex flex-col min-h-screen">
-        {(user.role === 'SUPER_ADMIN' || user.role === 'RAKEL_ADMIN') && (
+        {(user.role === 'SUPER_ADMIN' || user.role === 'RAKEL_ADMIN' || user.role === 'COMPANY_ADMIN') && (
           <header className="sticky top-0 z-10 h-12 flex items-center justify-end gap-3 px-6 border-b border-border bg-background">
             <span className="text-xs text-muted-foreground">
-              {user.role === 'SUPER_ADMIN' ? 'Super Admin' : 'Rakel Admin'}
+              {user.role === 'SUPER_ADMIN' ? 'Super Admin' : user.role === 'RAKEL_ADMIN' ? 'Rakel Admin' : (user.companyName ?? 'Company Admin')}
             </span>
             <NotificationBell />
           </header>

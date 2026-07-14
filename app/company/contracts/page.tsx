@@ -9,11 +9,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Spinner } from '@/components/ui/spinner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, FileText, FolderOpen, Filter, Upload, Eye, Download, BookOpen, ArrowLeft, AlertCircle, Pencil, Trash2 } from 'lucide-react';
+import { Plus, FileText, FolderOpen, Filter, Upload, Eye, Download, Paperclip, Pencil, Trash2 } from 'lucide-react';
 import { ContractsGrowthChart } from '@/components/contracts-growth-chart';
+import { DocumentViewModal } from '@/components/document-view-modal';
 import type { Contract, Company, ContractStatus, ReminderInterval } from '@/lib/types';
 import { REMINDER_INTERVAL_LABELS } from '@/lib/types';
 import { canSelectAnyCompany } from '@/lib/utils/rakel-staff';
+import { safeGet } from '@/lib/utils/safe-fetch';
 
 const STATUS_COLORS: Record<ContractStatus, string> = {
   ACTIVE:    'bg-primary/10 text-primary',
@@ -75,19 +77,19 @@ export default function CompanyContractsPage() {
   const [viewContract,    setViewContract]    = useState<Contract | null>(null);
   const [contractDoc,     setContractDoc]     = useState<any | null>(null);
   const [loadingDoc,      setLoadingDoc]      = useState(false);
-  const [showPreview,     setShowPreview]     = useState(false);
   const [downloadingDoc,  setDownloadingDoc]  = useState(false);
+
+  // Document preview (shared preview modal, same as every other View flow)
+  const [viewDoc, setViewDoc] = useState<any | null>(null);
 
   // ── Fetch data ──────────────────────────────────────────────────────────────
   const fetchContracts = () => {
     setLoading(true);
-    const ctrl  = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 8000);
-    fetch('/api/v1/contracts', { credentials: 'include', signal: ctrl.signal })
-      .then(r => r.ok ? r.json() : { contracts: [] })
+    // retries=1 guards against transient slow responses (e.g. cold starts) that
+    // would otherwise silently leave the page empty until a manual refresh.
+    safeGet('/api/v1/contracts', { contracts: [] }, 8000, 1)
       .then(d => setContracts(d.contracts ?? []))
-      .catch(() => setContracts([]))
-      .finally(() => { clearTimeout(timer); setLoading(false); });
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => {
@@ -188,7 +190,6 @@ export default function CompanyContractsPage() {
   const openContractView = async (contract: Contract): Promise<any | null> => {
     setViewContract(contract);
     setContractDoc(null);
-    setShowPreview(false);
     setLoadingDoc(true);
 
     let found: any | null = null;
@@ -210,12 +211,6 @@ export default function CompanyContractsPage() {
   const closeContractView = () => {
     setViewContract(null);
     setContractDoc(null);
-    setShowPreview(false);
-  };
-
-  const handleReadDocument = () => {
-    if (!contractDoc) return;
-    setShowPreview(true);
   };
 
   const handleDownloadDoc = async () => {
@@ -248,7 +243,6 @@ export default function CompanyContractsPage() {
     contracts.forEach(c => { counts[c.status] = (counts[c.status] ?? 0) + 1; });
     return counts;
   }, [contracts]);
-  const contractPreviewUrl = contractDoc ? `/api/v1/documents/${contractDoc.id}/download` : '';
 
   if (!mounted) return null;
 
@@ -439,8 +433,9 @@ export default function CompanyContractsPage() {
                 ))}
               </SelectContent>
             </Select>
-            {/* Company filter — only shown when multiple companies are available */}
-            {companies.length > 0 && (
+            {/* Company filter — only shown when multiple companies are available. Company Admin
+                is scoped to their own company and must never see or pick another one. */}
+            {companies.length > 0 && user?.role !== 'COMPANY_ADMIN' && (
               <Select value={companyFilter} onValueChange={setCompanyFilter}>
                 <SelectTrigger className="w-[180px] bg-input border-border"><SelectValue placeholder="Filter by Company" /></SelectTrigger>
                 <SelectContent className="bg-popover border-border">
@@ -530,8 +525,8 @@ export default function CompanyContractsPage() {
                       <Pencil className="h-3 w-3" />
                     </Button>
                   )}
-                  {/* Delete — admin only */}
-                  {(user?.role === 'SUPER_ADMIN' || user?.role === 'RAKEL_ADMIN') && (
+                  {/* Delete — admin roles + the owning company's own admin */}
+                  {(user?.role === 'SUPER_ADMIN' || user?.role === 'RAKEL_ADMIN' || user?.role === 'COMPANY_ADMIN') && (
                     <Button
                       variant="outline" size="sm"
                       className="border-border text-muted-foreground hover:text-destructive hover:border-destructive px-2"
@@ -580,139 +575,73 @@ export default function CompanyContractsPage() {
 
       {/* ── Contract Detail Modal ──────────────────────────────────────────── */}
       <Dialog open={viewContract !== null} onOpenChange={open => { if (!open) closeContractView(); }}>
-        <DialogContent className="bg-card border-border max-w-xl max-h-[92vh] overflow-y-auto">
+        <DialogContent className="bg-card border-border max-w-md">
           <DialogHeader>
-            <DialogDescription className="sr-only">Contract details and document viewer</DialogDescription>
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <FileText className="h-5 w-5 text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <DialogTitle className="text-foreground text-base leading-snug truncate">
-                  {viewContract?.title}
-                </DialogTitle>
-                {viewContract?.contractNumber && (
-                  <p className="text-xs text-muted-foreground mt-0.5">{viewContract.contractNumber}</p>
-                )}
-              </div>
-              {viewContract && (
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded uppercase flex-shrink-0 ${STATUS_COLORS[viewContract.status]}`}>
-                  {viewContract.status.charAt(0) + viewContract.status.slice(1).toLowerCase()}
-                </span>
-              )}
-            </div>
+            <DialogTitle className="text-foreground">{viewContract?.title}</DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              {viewContract?.contractNumber || viewContract?.client}
+            </DialogDescription>
           </DialogHeader>
 
           {viewContract && (
-            <>
-              {showPreview ? (
-                /* ── Preview panel ────────────────────────────────────── */
-                <div className="flex flex-col gap-3" style={{ minHeight: '55vh' }}>
-                  <button
-                    onClick={() => setShowPreview(false)}
-                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors self-start"
-                  >
-                    <ArrowLeft className="h-3.5 w-3.5" />Back to details
-                  </button>
-                  <div className="flex-1 rounded-lg border border-border overflow-hidden bg-muted/20" style={{ minHeight: '50vh' }}>
-                    {!contractDoc?.storageKey ? (
-                      <div className="flex flex-col items-center justify-center gap-3 p-8 text-center" style={{ minHeight: '50vh' }}>
-                        <AlertCircle className="h-10 w-10 text-muted-foreground opacity-60" />
-                        <p className="text-foreground font-medium">No file attached</p>
-                        <p className="text-sm text-muted-foreground">This document has no file. Re-upload to enable preview.</p>
-                      </div>
-                    ) : ['DOCX', 'DOC', 'XLSX', 'CSV'].includes((contractDoc?.fileType ?? '').toUpperCase()) ? (
-                      <div className="flex flex-col items-center justify-center gap-3 p-8 text-center" style={{ minHeight: '50vh' }}>
-                        <FileText className="h-10 w-10 text-muted-foreground opacity-60" />
-                        <p className="text-foreground font-medium">{contractDoc?.fileType?.toUpperCase()} files cannot be previewed in the browser</p>
-                        <p className="text-sm text-muted-foreground">Download the file to open it in its native application.</p>
-                      </div>
-                    ) : (
-                      <iframe
-                        key={contractDoc.id}
-                        src={contractPreviewUrl}
-                        title={contractDoc?.title}
-                        className="w-full border-0"
-                        style={{ height: '50vh' }}
-                      />
-                    )}
-                  </div>
+            <div className="mt-2 rounded-lg border border-border divide-y divide-border/50">
+              {([
+                ['Status',       viewContract.status.charAt(0) + viewContract.status.slice(1).toLowerCase()],
+                ['Company',      viewContract.company?.name ?? '—'],
+                ['Client',       viewContract.client        ?? '—'],
+                ['Created By',   (viewContract.creator as any)?.fullName
+                                   ? `${(viewContract.creator as any).fullName} (${viewContract.creator?.username})`
+                                   : (viewContract.creator?.username ?? viewContract.createdBy)],
+                ['Start Date',   viewContract.startDate  ? new Date(viewContract.startDate).toLocaleDateString('en-GB',  { day: '2-digit', month: 'short', year: 'numeric' }) : '—'],
+                ['Expiry Date',  viewContract.expiryDate ? new Date(viewContract.expiryDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'],
+                ['Created',      new Date(viewContract.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })],
+                ...(viewContract.description ? [['Description', viewContract.description]] : []),
+              ] as [string, string][]).map(([label, value]) => (
+                <div key={label} className="flex items-start gap-3 px-4 py-2.5">
+                  <p className="text-xs text-muted-foreground w-24 flex-shrink-0 mt-0.5">{label}</p>
+                  <p className="text-sm text-foreground flex-1">{value}</p>
                 </div>
-              ) : (
-                /* ── Metadata + actions ────────────────────────────────── */
-                <>
-                  <div className="mt-2 rounded-lg border border-border bg-muted/10 px-4">
-                    {[
-                      ['Company',      viewContract.company?.name ?? '—'],
-                      ['Client',       viewContract.client        ?? '—'],
-                      ['Created By',   (viewContract.creator as any)?.fullName
-                                         ? `${(viewContract.creator as any).fullName} (${viewContract.creator?.username})`
-                                         : (viewContract.creator?.username ?? viewContract.createdBy)],
-                      ['Start Date',   viewContract.startDate  ? new Date(viewContract.startDate).toLocaleDateString('en-GB',  { day: '2-digit', month: 'short', year: 'numeric' }) : '—'],
-                      ['Expiry Date',  viewContract.expiryDate ? new Date(viewContract.expiryDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'],
-                      ['Created',      new Date(viewContract.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })],
-                    ].map(([label, value]) => (
-                      <div key={label} className="flex items-start gap-3 py-3 border-b border-border/50 last:border-0">
-                        <p className="text-xs text-muted-foreground w-24 flex-shrink-0 mt-0.5">{label}</p>
-                        <p className="text-sm font-medium text-foreground break-words flex-1">{value}</p>
-                      </div>
-                    ))}
-                    {viewContract.description && (
-                      <div className="flex items-start gap-3 py-3 border-b border-border/50 last:border-0">
-                        <p className="text-xs text-muted-foreground w-24 flex-shrink-0 mt-0.5">Description</p>
-                        <p className="text-sm text-foreground flex-1">{viewContract.description}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Document section */}
-                  <div className="rounded-lg border border-border bg-muted/5 px-4 py-3">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Contract Document</p>
-                    {loadingDoc ? (
-                      <div className="flex items-center gap-2 py-2">
-                        <Spinner className="h-4 w-4 text-primary" />
-                        <span className="text-sm text-muted-foreground">Looking for attached document…</span>
-                      </div>
-                    ) : contractDoc ? (
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <FileText className="h-4 w-4 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">{contractDoc.title}</p>
-                          <p className="text-xs text-muted-foreground">{contractDoc.filename} · {contractDoc.fileType?.toUpperCase()}</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground py-1">No document attached to this contract.</p>
-                    )}
-                  </div>
-
-                  {/* Action buttons */}
-                  <div className="flex gap-3 pt-1">
-                    <Button
-                      className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
-                      disabled={!contractDoc || loadingDoc}
-                      onClick={handleReadDocument}
-                    >
-                      <BookOpen className="h-4 w-4 mr-2" />Read Document
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="flex-1 border-border text-foreground hover:bg-muted"
-                      disabled={!contractDoc || loadingDoc || downloadingDoc}
-                      onClick={handleDownloadDoc}
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      {downloadingDoc ? 'Downloading…' : 'Download'}
-                    </Button>
-                  </div>
-                </>
-              )}
-            </>
+              ))}
+            </div>
           )}
+
+          {/* ── Document Actions ── */}
+          <div className="mt-3 rounded-lg border border-border p-4 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+              <Paperclip className="h-3.5 w-3.5" />Document Actions
+            </p>
+            {loadingDoc ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Spinner className="h-3.5 w-3.5" />Looking for attached document…
+              </div>
+            ) : contractDoc ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <FileText className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span className="truncate">{contractDoc.filename}</span>
+                  <span className="flex-shrink-0 uppercase text-[10px] bg-muted px-1.5 py-0.5 rounded">{contractDoc.fileType}</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="flex-1 border-border gap-1.5 text-xs"
+                    onClick={() => setViewDoc(contractDoc)}>
+                    <Eye className="h-3.5 w-3.5" />View Document
+                  </Button>
+                  <Button size="sm" variant="outline" className="flex-1 border-border gap-1.5 text-xs"
+                    onClick={handleDownloadDoc} disabled={downloadingDoc}>
+                    {downloadingDoc ? <Spinner className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
+                    Download
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">No document attached to this contract.</p>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Document preview modal (shared app-wide component) ─────────────── */}
+      <DocumentViewModal doc={viewDoc} open={viewDoc !== null} onClose={() => setViewDoc(null)} />
     </div>
   );
 }

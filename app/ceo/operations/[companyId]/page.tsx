@@ -15,6 +15,7 @@ import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
+import { DocumentViewModal } from '@/components/document-view-modal';
 import type { Company, OperationsRecord } from '@/lib/types';
 import { CHART_TOOLTIP_STYLE } from '@/lib/chart-config';
 import { safeGet } from '@/lib/utils/safe-fetch';
@@ -32,6 +33,9 @@ export default function CEOOperationsDetailPage() {
   const [entryDocLoading, setEntryDocLoading] = useState(false);
   const [docDownloading,  setDocDownloading]  = useState(false);
   const [deletingId,      setDeletingId]      = useState<string | null>(null);
+
+  // Document preview (shared preview modal, same as every other View flow)
+  const [viewDoc, setViewDoc] = useState<any | null>(null);
 
   useEffect(() => {
     if (!companyId) return;
@@ -74,15 +78,6 @@ export default function CEOOperationsDetailPage() {
       .catch(() => setEntryDoc(null))
       .finally(() => setEntryDocLoading(false));
   }, [viewEntry]);
-
-  const handleViewDoc = async (doc: any) => {
-    const res = await fetch(`/api/v1/documents/${doc.id}/download`, { credentials: 'include' });
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const url  = URL.createObjectURL(blob);
-    window.open(url, '_blank');
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  };
 
   const handleDownloadDoc = async (doc: any) => {
     setDocDownloading(true);
@@ -382,7 +377,7 @@ export default function CEOOperationsDetailPage() {
 
       {/* ── View Entry dialog ────────────────────────────────────────────── */}
       <Dialog open={!!viewEntry} onOpenChange={open => { if (!open) setViewEntry(null); }}>
-        <DialogContent className="bg-card border-border w-full max-w-lg overflow-hidden">
+        <DialogContent className="bg-card border-border max-w-md">
           <DialogHeader>
             <DialogTitle className="text-foreground">Operations Entry</DialogTitle>
             <DialogDescription className="text-muted-foreground truncate">
@@ -390,66 +385,64 @@ export default function CEOOperationsDetailPage() {
             </DialogDescription>
           </DialogHeader>
 
-          {/* Scrollable body — header stays pinned */}
-          <div className="max-h-[70vh] overflow-y-auto space-y-3 pr-1">
-            {viewEntry && (
-              <div className="rounded-lg border border-border divide-y divide-border/50 overflow-hidden">
-                {([
-                  ['Date',        new Date(viewEntry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })],
-                  ['Activity',    viewEntry.activityType],
-                  ['Department',  viewEntry.department],
-                  ['Description', viewEntry.activityDescription ?? '—'],
-                  ['Manpower',    viewEntry.manpowerCount.toString()],
-                  ['Equipment',   viewEntry.equipmentTotal > 0 ? `${viewEntry.equipmentOperational} / ${viewEntry.equipmentTotal} operational` : '—'],
-                  ['Performance', `${viewEntry.performanceScore}%`],
-                  ['Notes',       viewEntry.notes ?? '—'],
-                  ['Logged By',   viewEntry.recorder?.username ?? viewEntry.recordedBy],
-                ] as [string, string][]).map(([label, value]) => (
-                  <div key={label} className="flex items-start gap-3 px-4 py-2.5 min-w-0">
-                    <p className="text-xs text-muted-foreground w-24 flex-shrink-0 mt-0.5">{label}</p>
-                    <p className="text-sm text-foreground flex-1 min-w-0 break-words whitespace-normal">{value}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* ── Document Actions ── */}
-            <div className="rounded-lg border border-border p-4 space-y-3 overflow-hidden">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                <Paperclip className="h-3.5 w-3.5 flex-shrink-0" />Document Actions
-              </p>
-              {entryDocLoading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Spinner className="h-3.5 w-3.5 animate-spin flex-shrink-0" />Looking for attachment…
+          {viewEntry && (
+            <div className="mt-2 rounded-lg border border-border divide-y divide-border/50">
+              {([
+                ['Date',        new Date(viewEntry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })],
+                ['Activity',    viewEntry.activityType],
+                ['Department',  viewEntry.department],
+                ['Description', viewEntry.activityDescription ?? '—'],
+                ['Manpower',    viewEntry.manpowerCount.toString()],
+                ['Equipment',   viewEntry.equipmentTotal > 0 ? `${viewEntry.equipmentOperational} / ${viewEntry.equipmentTotal} operational` : '—'],
+                ['Performance', `${viewEntry.performanceScore}%`],
+                ['Notes',       viewEntry.notes ?? '—'],
+                ['Logged By',   viewEntry.recorder?.username ?? viewEntry.recordedBy],
+              ] as [string, string][]).map(([label, value]) => (
+                <div key={label} className="flex items-start gap-3 px-4 py-2.5">
+                  <p className="text-xs text-muted-foreground w-24 flex-shrink-0 mt-0.5">{label}</p>
+                  <p className="text-sm text-foreground flex-1">{value}</p>
                 </div>
-              ) : entryDoc ? (
-                <div className="space-y-2 min-w-0">
-                  {/* Filename row — min-w-0 on parent enables truncate on child */}
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
-                    <FileText className="h-3.5 w-3.5 flex-shrink-0" />
-                    <span className="truncate min-w-0 flex-1">{entryDoc.filename}</span>
-                    <span className="flex-shrink-0 uppercase text-[10px] bg-muted px-1.5 py-0.5 rounded">{entryDoc.fileType}</span>
-                  </div>
-                  {/* Action buttons — flex-wrap so they reflow on narrow screens */}
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" className="flex-1 shrink-0 border-border gap-1.5 text-xs"
-                      onClick={() => handleViewDoc(entryDoc)}>
-                      <Eye className="h-3.5 w-3.5" />View Document
-                    </Button>
-                    <Button size="sm" variant="outline" className="flex-1 shrink-0 border-border gap-1.5 text-xs"
-                      onClick={() => handleDownloadDoc(entryDoc)} disabled={docDownloading}>
-                      {docDownloading ? <Spinner className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
-                      Download
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground italic">No document attached to this entry.</p>
-              )}
+              ))}
             </div>
+          )}
+
+          {/* ── Document Actions ── */}
+          <div className="mt-3 rounded-lg border border-border p-4 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+              <Paperclip className="h-3.5 w-3.5" />Document Actions
+            </p>
+            {entryDocLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Spinner className="h-3.5 w-3.5" />Looking for attachment…
+              </div>
+            ) : entryDoc ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <FileText className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span className="truncate">{entryDoc.filename}</span>
+                  <span className="flex-shrink-0 uppercase text-[10px] bg-muted px-1.5 py-0.5 rounded">{entryDoc.fileType}</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="flex-1 border-border gap-1.5 text-xs"
+                    onClick={() => setViewDoc(entryDoc)}>
+                    <Eye className="h-3.5 w-3.5" />View Document
+                  </Button>
+                  <Button size="sm" variant="outline" className="flex-1 border-border gap-1.5 text-xs"
+                    onClick={() => handleDownloadDoc(entryDoc)} disabled={docDownloading}>
+                    {docDownloading ? <Spinner className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
+                    Download
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">No document attached to this entry.</p>
+            )}
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Document preview modal (shared app-wide component) ─────────────── */}
+      <DocumentViewModal doc={viewDoc} open={viewDoc !== null} onClose={() => setViewDoc(null)} />
     </div>
   );
 }

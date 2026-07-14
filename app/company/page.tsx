@@ -6,22 +6,47 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { KPICard } from '@/components/kpi-card';
 import { Spinner } from '@/components/ui/spinner';
 import { DollarSign, TrendingUp, Package, Truck, Activity, BarChart2, FileText, FileSignature, Receipt, ClipboardList, Eye, Download } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { DocumentViewModal } from '@/components/document-view-modal';
-import type { AnalyticsRecord, Service, Document } from '@/lib/types';
+import type { AnalyticsRecord, Service, Document, Contract, Invoice, ContractStatus, InvoiceStatus, OperationsRecord } from '@/lib/types';
 import { CHART_TOOLTIP_STYLE } from '@/lib/chart-config';
 import { safeGet } from '@/lib/utils/safe-fetch';
+
+// Status color tokens shared with the Contracts/Invoices pages' status badges,
+// so the dashboard charts read consistently with the rest of the portal.
+const CONTRACT_STATUS_COLORS: Record<ContractStatus, string> = {
+  ACTIVE:    'var(--primary)',
+  PENDING:   'var(--chart-3)',
+  COMPLETED: 'var(--chart-2)',
+  EXPIRED:   'var(--muted-foreground)',
+  CANCELLED: 'var(--destructive)',
+};
+const INVOICE_STATUS_COLORS: Record<InvoiceStatus, string> = {
+  DRAFT:     'var(--muted-foreground)',
+  SENT:      'var(--chart-3)',
+  PAID:      'var(--primary)',
+  OVERDUE:   'var(--destructive)',
+  CANCELLED: 'var(--muted-foreground)',
+};
+const CONTRACT_STATUSES: ContractStatus[] = ['ACTIVE', 'PENDING', 'COMPLETED', 'EXPIRED', 'CANCELLED'];
+const INVOICE_STATUSES:  InvoiceStatus[]  = ['DRAFT', 'SENT', 'PAID', 'OVERDUE', 'CANCELLED'];
 
 export default function CompanyOverviewPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
   const { user, isLoading } = useAuth();
-  const isStaff = user?.role === 'STAFF';
+  const isStaff        = user?.role === 'STAFF';
+  const isCompanyAdmin  = user?.role === 'COMPANY_ADMIN';
 
-  // ── Analytics state (COMPANY_ADMIN + CEO) ─────────────────────────────────
+  // ── Analytics state (fallback: CEO/SUPER_ADMIN/RAKEL_ADMIN landing here directly) ─
   const [analytics, setAnalytics] = useState<AnalyticsRecord[]>([]);
   const [services,  setServices]  = useState<Service[]>([]);
   const [loading,   setLoading]   = useState(true);
+
+  // ── Company Admin dashboard state ─────────────────────────────────────────
+  const [contracts,        setContracts]        = useState<Contract[]>([]);
+  const [invoices,         setInvoices]          = useState<Invoice[]>([]);
+  const [operationsRecords, setOperationsRecords] = useState<OperationsRecord[]>([]);
 
   // ── Staff upload history state ────────────────────────────────────────────
   const [myDocs,       setMyDocs]       = useState<Document[]>([]);
@@ -39,6 +64,17 @@ export default function CompanyOverviewPage() {
         .then(d => setMyDocs(d.documents ?? []))
         .catch(() => {})
         .finally(() => { setHistoryLoading(false); setLoading(false); });
+    } else if (isCompanyAdmin) {
+      if (!user?.companyId) { setLoading(false); return; }
+      Promise.all([
+        safeGet(`/api/v1/contracts`,              { contracts: [] }, 8000, 1),
+        safeGet(`/api/v1/invoices`,                { invoices: [] }, 8000, 1),
+        safeGet(`/api/v1/operations?days=3650`,    { records: [] }, 8000, 1),
+      ]).then(([cd, id, od]) => {
+        setContracts((cd as any).contracts ?? []);
+        setInvoices((id as any).invoices ?? []);
+        setOperationsRecords((od as any).records ?? []);
+      }).catch(() => {}).finally(() => setLoading(false));
     } else {
       if (!user?.companyId) { setLoading(false); return; }
       Promise.all([
@@ -49,7 +85,7 @@ export default function CompanyOverviewPage() {
         setServices((cd as any).company?.services ?? []);
       }).catch(() => {}).finally(() => setLoading(false));
     }
-  }, [user?.companyId, isStaff]);
+  }, [user?.companyId, isStaff, isCompanyAdmin]);
 
   if (!mounted) return null;
   if (isLoading || loading) {
@@ -180,6 +216,97 @@ export default function CompanyOverviewPage() {
         </Card>
 
         <DocumentViewModal doc={viewDoc} open={viewDoc !== null} onClose={() => setViewDoc(null)} />
+      </div>
+    );
+  }
+
+  // ── Company Admin dashboard ───────────────────────────────────────────────
+  if (isCompanyAdmin) {
+    const activeContracts = contracts.filter(c => c.status === 'ACTIVE').length;
+    const totalInvoices   = invoices.length;
+    const avgPerformance  = operationsRecords.length > 0
+      ? Math.round(operationsRecords.reduce((s, r) => s + r.performanceScore, 0) / operationsRecords.length)
+      : 0;
+
+    const contractStatusData = CONTRACT_STATUSES.map(status => ({
+      status,
+      count: contracts.filter(c => c.status === status).length,
+    }));
+    const invoiceStatusData = INVOICE_STATUSES.map(status => ({
+      status,
+      count: invoices.filter(i => i.status === status).length,
+    }));
+
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">{user?.companyName ?? 'Company'} Dashboard</h1>
+          <p className="text-muted-foreground">Overview of your company&apos;s contracts, invoices and performance.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <KPICard title="Active Contracts"    value={activeContracts.toLocaleString()} icon={<FileSignature className="h-5 w-5" />} />
+          <KPICard title="Invoices"            value={totalInvoices.toLocaleString()}   icon={<Receipt className="h-5 w-5" />} />
+          <KPICard title="Average Performance" value={`${avgPerformance}%`}             icon={<Activity className="h-5 w-5" />} />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="text-foreground flex items-center gap-2">
+                <FileSignature className="h-5 w-5 text-primary" />
+                Contract Analytics
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {contracts.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-12">No contracts yet.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={contractStatusData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="status" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} allowDecimals={false} />
+                    <Tooltip contentStyle={CHART_TOOLTIP_STYLE} formatter={(v: number) => [v, 'Contracts']} />
+                    <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                      {contractStatusData.map(d => (
+                        <Cell key={d.status} fill={CONTRACT_STATUS_COLORS[d.status]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="text-foreground flex items-center gap-2">
+                <Receipt className="h-5 w-5 text-primary" />
+                Invoice Analytics
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {invoices.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-12">No invoices yet.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={invoiceStatusData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="status" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} allowDecimals={false} />
+                    <Tooltip contentStyle={CHART_TOOLTIP_STYLE} formatter={(v: number) => [v, 'Invoices']} />
+                    <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                      {invoiceStatusData.map(d => (
+                        <Cell key={d.status} fill={INVOICE_STATUS_COLORS[d.status]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }

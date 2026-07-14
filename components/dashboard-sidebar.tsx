@@ -70,6 +70,15 @@ export function DashboardSidebar({ services }: DashboardSidebarProps) {
     { label: 'Staff',       href: '/company/staff',      icon: <Users           className="h-4 w-4" /> },
   ];
 
+  // Company Admin: dedicated, simplified nav scoped to their own company's data.
+  const companyAdminNavItems: NavItem[] = [
+    { label: 'Overview',    href: '/company',            icon: <LayoutDashboard className="h-4 w-4" /> },
+    { label: 'Operations',  href: '/company/operations', icon: <ClipboardList   className="h-4 w-4" /> },
+    { label: 'Contracts',   href: '/company/contracts',  icon: <FileSignature   className="h-4 w-4" /> },
+    { label: 'Invoices',    href: '/company/invoices',   icon: <Receipt         className="h-4 w-4" /> },
+    { label: 'Documents',   href: '/company/documents',  icon: <FolderOpen      className="h-4 w-4" /> },
+  ];
+
   // ── Staff nav: ALL Staff users share the same simplified navigation ─────────
   // Staff interact exclusively through the Upload Data Hub.
   // No individual module links, no analytics, no admin controls.
@@ -103,10 +112,11 @@ export function DashboardSidebar({ services }: DashboardSidebarProps) {
       : ALL_COMPANY_NAV;
 
   const navItems =
-    user?.role === 'SUPER_ADMIN'   ? adminNavItems
-    : user?.role === 'RAKEL_ADMIN' ? rakelAdminNavItems
-    : user?.role === 'CEO'         ? ceoNavItems
-    : user?.role === 'STAFF'       ? staffNavItems       // ALL Staff → Upload Hub only
+    user?.role === 'SUPER_ADMIN'    ? adminNavItems
+    : user?.role === 'RAKEL_ADMIN'  ? rakelAdminNavItems
+    : user?.role === 'CEO'          ? ceoNavItems
+    : user?.role === 'STAFF'        ? staffNavItems       // ALL Staff → Upload Hub only
+    : user?.role === 'COMPANY_ADMIN' ? companyAdminNavItems
     : companyNavItems;
 
   const roleLabel =

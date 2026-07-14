@@ -68,6 +68,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'users:read', 'users:write',
     'analytics:read', 'analytics:export',
     'documents:read', 'documents:upload', 'documents:delete',
+    'audit:read',                          // required for the company-scoped notification bell
     'settings:read',
     'data_import:write',
     'operations:read', 'operations:write',

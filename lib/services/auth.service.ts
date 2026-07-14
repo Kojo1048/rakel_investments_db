@@ -18,6 +18,12 @@ export async function verifyPassword(plain: string, hash: string): Promise<boole
 export interface LoginResult {
   token: string;
   user: SessionPayload;
+  // Display-only fields — kept out of the signed JWT payload, but needed by the
+  // client immediately after login (before any /api/v1/auth/me refresh happens).
+  fullName:     string | null;
+  companyName:  string | null;
+  email:        string | null;
+  staffModules: unknown | null;
 }
 
 export async function login(
@@ -98,7 +104,14 @@ const { error: sessionErr } = await db.from('UserSession').insert({
     companyId: user.companyId ?? undefined,
   });
 
-  return { token, user: payload };
+  return {
+    token,
+    user: payload,
+    fullName:     (user as any).fullName ?? null,
+    companyName:  (user as any).company?.name ?? null,
+    email:        (user as any).email ?? null,
+    staffModules: (user as any).staffModules ?? null,
+  };
 }
 
 export async function logout(userId: string, username: string, tokenHash?: string): Promise<void> {
